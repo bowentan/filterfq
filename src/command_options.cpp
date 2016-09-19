@@ -4,7 +4,7 @@ namespace command_options {
     void inter_dependency(const boost::program_options::variables_map& vm, const char* for_what, const char* required_option) {
         if (!vm.count("help")) {
             if (vm.count(for_what) && !vm[for_what].defaulted())
-                if (!vm.count(required_option) || !vm[required_option].defaulted()) {
+                if (!vm.count(required_option) && !vm[required_option].defaulted()) {
                     throw std::logic_error(std::string("Option '") + for_what + "' requires option '" + required_option + "'.");
                 }
         }

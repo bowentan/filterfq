@@ -14,8 +14,9 @@
 
 namespace fastq_filter {
 
-    int check_quality_system(const boost::filesystem::path& filepath) {
-        std::ifstream infile (filepath.string().c_str(), std::ios_base::in | std::ios_base::binary);
+    int* check_quality_system(const boost::filesystem::path& filepath) {
+        int* results = new int[3];
+        std::ifstream infile (filepath.string(), std::ios_base::in | std::ios_base::binary);
         boost::iostreams::filtering_istream decompressor;
         decompressor.push(boost::iostreams::gzip_decompressor());
         decompressor.push(infile);
@@ -48,33 +49,35 @@ namespace fastq_filter {
             }
             n_read++;
         }
+        results[0] = min;
+        results[1] = max;
         boost::iostreams::close(decompressor, std::ios_base::in);
-        std::cout << "min: " << min << std::endl;
-        std::cout << "max: " << max << std::endl;
+        // std::cout << "min quality is \"" << min << "\" and max quality is \"" << max << "\"" << std::endl;
         if (min < ';') {
             if (max == 'I') {
                 // sanger
-                return 0;
+                results[2] = 0;
             }
             else {
                 // prefer illumina 1.8+
-                return 4;
+                results[2] = 4;
             }
         }
         else {
             if (min < '@') {
                 // Solexa
-                return 1;
+                results[2] = 1;
             }
             else if (min < 'B') {
                 // illumina 1.3+
-                return 2;
+                results[2] = 2;
             }
             else {
                 // prefer illumina 1.5+
-                return 3;
+                results[2] = 3;
             }
         }
+        return results;
     }
     
     float get_base_N_rate(const std::string& read_seq) {

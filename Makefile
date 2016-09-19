@@ -13,13 +13,15 @@ LIB := -pthread -L lib -lboost_program_options -lboost_system -lboost_filesystem
 INC := -I include
 
 $(TARGET): $(OBJECTS)
-	@echo "Linking..."
+ifeq (,$(wildcard $(BINDIR)))
 	@mkdir $(BINDIR)
+endif
+	@echo "Linking..."
 	@echo "$(CC) $^ -o $(TARGET) $(LIB)"; $(CC) $^ -o $(TARGET) $(LIB)
 
 $(BUILDDIR)/%.o: $(SRCDIR)/%.$(SRCEXT)
 	@mkdir -p $(BUILDDIR)
-	@echo " $(CC) $(CFLAGS) $(INC) -c -o $@ $<"; $(CC) $(CFLAGS) $(INC) -c -o $@ $<
+	@echo "$(CC) $(CFLAGS) $(INC) -c -o $@ $<"; $(CC) $(CFLAGS) $(INC) -c -o $@ $<
 
 clean:
 	@echo "Cleaning..."; 
