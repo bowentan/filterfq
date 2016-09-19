@@ -46,7 +46,7 @@ int main(int argc, char* argv[]) {
             // input
             ("help,h", "produce help message")
             ("baseNrate,N", value<float>(&max_base_N_rate) -> default_value(0.05), "maximum rate of \'N\' base allowed along a read")
-            ("averageQuality,Q", value<float>(&min_ave_quality), "minimum average quality allowed along a read")
+            ("averageQuality,Q", value<float>(&min_ave_quality) -> default_value(0), "minimum average quality allowed along a read")
             ("perBaseQuality,q", value<int>(&min_base_quality) -> default_value(5), "minimum quality per base allowed along a read")
             ("lowQualityRate,r", value<float>(&max_low_quality_rate) -> default_value(0.5), "maximum low quality rate along a read")
             ("rawQualitySystem,s", value<int>(&raw_quality_sys), "specify quality system of raw fastq\n0: Sanger\n1: Solexa\n2: Illumina 1.3+\n3: Illumina 1.5+\n4: Illumina 1.8+")
