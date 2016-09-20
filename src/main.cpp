@@ -26,6 +26,7 @@ int main(int argc, char* argv[]) {
     try {
         ptime start_time = second_clock::local_time();
         // input variables
+        bool does_check_quality_sys;
         const string quality_sys[5] = {"Sanger", "Solexa", "Illumina 1.3+", "Illumina 1.5+", "Illumina 1.8+"};
         int raw_quality_sys;
         bool prefer_specified_raw_quality_sys;
@@ -40,11 +41,13 @@ int main(int argc, char* argv[]) {
         path out_dir;
         string out_basename;
         vector<path> clean_fq;
+        vector<path> dropped_fq;
         
         options_description desc("useage: filterfq");
         desc.add_options()
             // input
             ("help,h", "produce help message")
+            ("checkQualitySystem,c", bool_switch(&does_check_quality_sys), "only check quality system of the fastq file")
             ("baseNrate,N", value<float>(&max_base_N_rate) -> default_value(0.05), "maximum rate of \'N\' base allowed along a read")
             ("averageQuality,Q", value<float>(&min_ave_quality) -> default_value(0), "minimum average quality allowed along a read")
             ("perBaseQuality,q", value<int>(&min_base_quality) -> default_value(5), "minimum quality per base allowed along a read")
@@ -57,6 +60,7 @@ int main(int argc, char* argv[]) {
             ("outDir,O", value<path>(&out_dir) -> default_value(current_path().string()), "specify output directory, not used if cleanFastq is specified")
             ("outBasename,o", value<string>(&out_basename), "specify the basename for output file(s), required if outDir is specified")
             ("cleanFastq,F", value< vector<path> >(&clean_fq) -> multitoken(), "cleaned fastq file name(s), not used if outDir or outBasename is specified")
+            ("droppedFastq,d", value< vector<path> >(&dropped_fq) -> multitoken(), "fastq file(s) containing reads that are filtered out")
         ;
 
         variables_map vm; 
@@ -65,21 +69,34 @@ int main(int argc, char* argv[]) {
             cout << desc << "\n";
             return 0;
         }
-        inter_dependency(vm, "outBasename", "outDir");
-        inter_independency(vm, "cleanFastq", "outBasename");
-        inter_independency(vm, "cleanFastq", "outDir");
         notify(vm);    
         
-
-        for (int i = 0; i < raw_fq.size(); i++) {
+        for (vector<path>::iterator p = raw_fq.begin(); p != raw_fq.end(); p++) {
             try {
-                raw_fq[i] = canonical(raw_fq[i]);
+                *p = canonical(*p);
             }
             catch (filesystem_error& e) {
                 cerr << "error: No such file or directory: " << e.path1().string() << endl;
                 return 1;
             }
         }
+
+        if (does_check_quality_sys) {
+            int* checked_quality_sys = check_quality_system(raw_fq[0]);
+            cout << log_title() << "INFO -- After checking 10,000 random reads, min quality character is \'" 
+                << (char)checked_quality_sys[0] 
+                << "\' and max quality character is \'" 
+                << (char)checked_quality_sys[1] 
+                << "\', the quality system is probably " 
+                << quality_sys[checked_quality_sys[2]] 
+                << "." << endl;
+            return 0;
+        }
+        inter_dependency(vm, "outBasename", "outDir");
+        inter_independency(vm, "cleanFastq", "outBasename");
+        inter_independency(vm, "cleanFastq", "outDir");
+        inter_independency(vm, "droppedFastq", "outBasename");
+        inter_independency(vm, "droppedFastq", "outDir");
         
         try {
             out_dir = canonical(out_dir);
@@ -91,17 +108,20 @@ int main(int argc, char* argv[]) {
 
         if (vm.count("outBasename")) {
             if (raw_fq.size() == 1) {
-                clean_fq.push_back(out_dir / path(out_basename + ".fastq.gz"));
+                clean_fq.push_back(out_dir / path(out_basename + ".clean.fastq.gz"));
+                dropped_fq.push_back(out_dir / path(out_basename + ".dropped.fastq.gz"));
             }
             else if (raw_fq.size() == 2) {
                 for (int i = 0; i < raw_fq.size(); i++) {
-                    clean_fq.push_back(out_dir / path(out_basename + "_" + to_string(i + 1) + ".fastq.gz"));
+                    clean_fq.push_back(out_dir / path(out_basename + "_" + to_string(i + 1) + ".clean.fastq.gz"));
+                    dropped_fq.push_back(out_dir / path(out_basename + "_" + to_string(i + 1) + ".dropped.fastq.gz"));
                 }
             }
         }
         else {
             for (int i = 0; i < clean_fq.size(); i++) {
                 clean_fq[i] = out_dir / clean_fq[i].filename();
+                dropped_fq[i] = out_dir / dropped_fq[i].filename();
             }
         }
 
@@ -141,6 +161,11 @@ int main(int argc, char* argv[]) {
                 }
                 else if (op == "cleanFastq") {
                     for (path p : clean_fq) {
+                        cout << p.string() << " ";
+                    }
+                }
+                else if (op == "droppedFastq") {
+                    for (path p : dropped_fq) {
                         cout << p.string() << " ";
                     }
                 }
