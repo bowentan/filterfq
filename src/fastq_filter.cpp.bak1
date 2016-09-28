@@ -1,6 +1,5 @@
 #include <iostream>
 #include <fstream>
-#include <unordered_set>
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iostreams/filter/gzip.hpp>
@@ -90,24 +89,19 @@ namespace fastq_filter {
     }
 
     float get_average_quality(const std::string& quality_seq, const int sys) {
-        unsigned int sum = 0;
-        for (std::string::const_iterator s = quality_seq.begin(); s != quality_seq.end(); s++) {
-            sum += *s;
-        }
-        return sum * 1.0 / quality_seq.size() - (quality_system::zero_quality)[sys];
         // corresponding quality min
-        // boost::accumulators::accumulator_set<int, boost::accumulators::stats<boost::accumulators::tag::mean> > acc;
-        // for(char q : quality_seq) {
-        //     acc(q);
-        // }
-        // return boost::accumulators::mean(acc) - (quality_system::zero_quality)[sys];
+        boost::accumulators::accumulator_set<int, boost::accumulators::stats<boost::accumulators::tag::mean> > acc;
+        for(char q : quality_seq) {
+            acc(q);
+        }
+        return boost::accumulators::mean(acc) - (quality_system::zero_quality)[sys];
     }
 
     float get_low_quality_rate(const std::string& quality_seq, const int sys, const int base_quality_threshold) {
         return std::count_if(quality_seq.begin(), quality_seq.end(), [sys, base_quality_threshold](char q) {return q - (quality_system::zero_quality)[sys] < base_quality_threshold;}) * 1.0 / quality_seq.length();
     }
 
-    void load_adapter(boost::filesystem::path& adapter_list, std::unordered_set<std::string>& adapter_read_id) {
+    void load_adapter(boost::filesystem::path& adapter_list, std::vector<std::string>& adapter_read_id) {
         std::ifstream inadapter(adapter_list.c_str(), std::ios_base::in | std::ios_base::binary);
         boost::iostreams::filtering_istream inadapter_decompressor;
         inadapter_decompressor.push(boost::iostreams::gzip_decompressor());
@@ -118,7 +112,7 @@ namespace fastq_filter {
         std::vector<std::string> line_splited;
         while (getline(inadapter_decompressor, line)) {
             boost::split(line_splited, line, boost::is_any_of("\t"));
-            adapter_read_id.insert(line_splited[0]);
+            adapter_read_id.push_back(line_splited[0]);
             if (adapter_read_id.size() % 10000 == 0) {
                 std::cout << log_title() << "INFO -- "
                     << adapter_read_id.size() << " read ID have been loaded." << std::endl;
@@ -127,7 +121,7 @@ namespace fastq_filter {
         std::cout << log_title() << "INFO -- Totally "
             << adapter_read_id.size() << " have been loaded." << std::endl;
         
-        // std::cout << log_title() << "INFO -- Sorting adapter read IDs..." << std::endl;
-        // std::sort(adapter_read_id.begin(), adapter_read_id.end());
+        std::cout << log_title() << "INFO -- Sorting adapter read IDs..." << std::endl;
+        std::sort(adapter_read_id.begin(), adapter_read_id.end());
     }
 }

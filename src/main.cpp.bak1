@@ -9,7 +9,6 @@
 #include <iostream>
 #include <fstream>
 #include <iterator>
-#include <unordered_set>
 
 #define TESTING
 
@@ -313,7 +312,7 @@ int main(int argc, char* argv[]) {
                     dropped_outfq_compressor.push(gzip_compressor());
                     dropped_outfq_compressor.push(dropped_outfq);
                     
-                    unordered_set<string> adapter_read_id;
+                    vector<string> adapter_read_id;
                     if (adapter.size() != 0) {
                         load_adapter(adapter[0], adapter_read_id);
                     }
@@ -324,37 +323,37 @@ int main(int argc, char* argv[]) {
                         << setw(12) << "Filtered" << " | "
                         << setw(12) << "Ratio(%)" << " | "
                         << setw(12) << "High" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | "
+                        << setw(12) << "Ratio(%)" << " | "
+                        << setw(12) << "Ratio(%)" << " | "
                         << setw(12) << "Low average" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | "
+                        << setw(12) << "Ratio(%)" << " | "
+                        << setw(12) << "Ratio(%)" << " | "
                         << setw(12) << "High low-" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | " 
-                        << setw(12) << "With" << " | " 
-                    //     << setw(12) << "Ratio(%)" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | " 
+                        << setw(12) << "Ratio(%)" << " | "
+                        << setw(12) << "Ratio(%)" << " | " 
+                        << setw(12) << "With adapter" << " | " 
+                        << setw(12) << "Ratio(%)" << " | "
+                        << setw(12) << "Ratio(%)" << " | " 
                         << endl;
                     cout << log_title() << "INFO "
                         << setw(12) << "reads" << " | "
                         << setw(12) << "reads" << " | "
                         << setw(12) << "filtered" << " | "
                         << setw(12) << "N-rate" << " | "
-                    //     << setw(12) << "in processed" << " | "
-                    //     << setw(12) << "in filtered" << " | "
+                        << setw(12) << "in processed" << " | "
+                        << setw(12) << "in filtered" << " | "
                         << setw(12) << "quality" << " | "
-                    //     << setw(12) << "in processed" << " | "
-                    //     << setw(12) << "in filtered" << " | "
+                        << setw(12) << "in processed" << " | "
+                        << setw(12) << "in filtered" << " | "
                         << setw(12) << "quality-rate" << " | "
-                    //     << setw(12) << "in processed" << " | "
-                    //     << setw(12) << "in filtered" << " | "
-                        << setw(12) << "adapter" << " | "
-                    //     << setw(12) << "in processed" << " | "
-                    //     << setw(12) << "in filtered" << " | "
+                        << setw(12) << "in processed" << " | "
+                        << setw(12) << "in filtered" << " | "
+                        << setw(12) << "" << " | "
+                        << setw(12) << "in processed" << " | "
+                        << setw(12) << "in filtered" << " | "
                         << endl;
                     cout << log_title() << "INFO ";
-                    for (int i = 0; i < 15 * 7; i++) {
+                    for (int i = 0; i < 15 * 15; i++) {
                         cout << "-";
                     }
                     cout << endl;
@@ -366,6 +365,7 @@ int main(int argc, char* argv[]) {
                         n_read_filtered = 0,
                         n_read_with_adapter = 0;
                     bool is_filtered;
+                    pair<vector<string>::iterator, vector<string>::iterator> bounds;
                     string read_id_line, read_line, plus_line, quality_line;
                     while (getline(infq_decompressor, read_id_line)) {
                         getline(infq_decompressor, read_line);
@@ -381,16 +381,20 @@ int main(int argc, char* argv[]) {
                         //     << quality_line << endl;
                         // cout << get_base_N_rate(read_line) << " "
                         //     << get_average_quality(quality_line, raw_quality_sys) << " "
-                        //     << get_low_quality_rate(quality_line, raw_quality_sys, min_base_quality) << endl;
+                        //     << get_low_quality_rate(quality_line, raw_quality_sys, base_quality) << endl;
                         if (adapter.size() != 0) {
                             string s = read_id_line.substr(1, read_id_line.size() - 1);
-                            if (adapter_read_id.count(s) > 0) {
-                                n_read_with_adapter++;
-                                if (!is_filtered) {
-                                    n_read_filtered++;
-                                    is_filtered = true;
-                                }
+                            bounds = equal_range(adapter_read_id.begin(), adapter_read_id.end(), s);
+                            if (bounds.first != bounds.second) {
+                                cout << *(bounds.first) << endl;
+                                // n_read_with_adapter++;
+                                adapter_read_id.erase(bounds.first);
+                                // if (!is_filtered) {
+                                //     n_read_filtered++;
+                                //     is_filtered = true;
+                                // }
                             }
+                            continue;
                         }
                         if (get_base_N_rate(read_line) > max_base_N_rate) {
                             n_read_high_N_rate++;
@@ -421,17 +425,17 @@ int main(int argc, char* argv[]) {
                                 << setw(12) << setprecision(6) << n_read_filtered << " | "
                                 << setw(12) << setprecision(6) << n_read_filtered * 100.0 / n_read_processed << " | "
                                 << setw(12) << setprecision(6) << n_read_high_N_rate << " | "
-                            //     << setw(12) << setprecision(6) << n_read_high_N_rate * 100.0 / n_read_processed << " | "
-                            //     << setw(12) << setprecision(6) << n_read_high_N_rate * 100.0 / n_read_filtered << " | "
+                                << setw(12) << setprecision(6) << n_read_high_N_rate * 100.0 / n_read_processed << " | "
+                                << setw(12) << setprecision(6) << n_read_high_N_rate * 100.0 / n_read_filtered << " | "
                                 << setw(12) << setprecision(6) << n_read_low_ave_quality << " | "
-                            //     << setw(12) << setprecision(6) << n_read_low_ave_quality * 100.0 / n_read_processed << " | "
-                            //     << setw(12) << setprecision(6) << n_read_low_ave_quality * 100.0 / n_read_filtered << " | "
+                                << setw(12) << setprecision(6) << n_read_low_ave_quality * 100.0 / n_read_processed << " | "
+                                << setw(12) << setprecision(6) << n_read_low_ave_quality * 100.0 / n_read_filtered << " | "
                                 << setw(12) << setprecision(6) << n_read_high_low_quality_rate << " | "
-                            //     << setw(12) << setprecision(6) << n_read_high_low_quality_rate * 100.0 / n_read_processed << " | "
-                            //     << setw(12) << setprecision(6) << n_read_high_low_quality_rate * 100.0 / n_read_filtered << " | "
+                                << setw(12) << setprecision(6) << n_read_high_low_quality_rate * 100.0 / n_read_processed << " | "
+                                << setw(12) << setprecision(6) << n_read_high_low_quality_rate * 100.0 / n_read_filtered << " | "
                                 << setw(12) << setprecision(6) << n_read_with_adapter << " | "
-                            //     << setw(12) << setprecision(6) << n_read_with_adapter * 100.0 / n_read_processed << " | "
-                            //     << setw(12) << setprecision(6) << n_read_with_adapter * 100.0 / n_read_filtered << " | "
+                                << setw(12) << setprecision(6) << n_read_with_adapter * 100.0 / n_read_processed << " | "
+                                << setw(12) << setprecision(6) << n_read_with_adapter * 100.0 / n_read_filtered << " | "
                                 << endl;
                         }
 
@@ -458,7 +462,7 @@ int main(int argc, char* argv[]) {
                     close(clean_outfq_compressor, ios_base::out);
                     close(dropped_outfq_compressor, ios_base::out);
                     cout << log_title() << "INFO ";
-                    for (int i = 0; i < 15 * 7; i++) {
+                    for (int i = 0; i < 15 * 15; i++) {
                         cout << "-";
                     }
                     cout << endl;
@@ -468,17 +472,17 @@ int main(int argc, char* argv[]) {
                         << setw(12) << setprecision(6) << n_read_filtered << " | "
                         << setw(12) << setprecision(6) << n_read_filtered * 100.0 / n_read_processed << " | "
                         << setw(12) << setprecision(6) << n_read_high_N_rate << " | "
-                    //     << setw(12) << setprecision(6) << n_read_high_N_rate * 100.0 / n_read_processed << " | "
-                    //     << setw(12) << setprecision(6) << n_read_high_N_rate * 100.0 / n_read_filtered << " | "
+                        << setw(12) << setprecision(6) << n_read_high_N_rate * 100.0 / n_read_processed << " | "
+                        << setw(12) << setprecision(6) << n_read_high_N_rate * 100.0 / n_read_filtered << " | "
                         << setw(12) << setprecision(6) << n_read_low_ave_quality << " | "
-                    //     << setw(12) << setprecision(6) << n_read_low_ave_quality * 100.0 / n_read_processed << " | "
-                    //     << setw(12) << setprecision(6) << n_read_low_ave_quality * 100.0 / n_read_filtered << " | "
+                        << setw(12) << setprecision(6) << n_read_low_ave_quality * 100.0 / n_read_processed << " | "
+                        << setw(12) << setprecision(6) << n_read_low_ave_quality * 100.0 / n_read_filtered << " | "
                         << setw(12) << setprecision(6) << n_read_high_low_quality_rate << " | "
-                    //     << setw(12) << setprecision(6) << n_read_high_low_quality_rate * 100.0 / n_read_processed << " | "
-                    //     << setw(12) << setprecision(6) << n_read_high_low_quality_rate * 100.0 / n_read_filtered << " | "
+                        << setw(12) << setprecision(6) << n_read_high_low_quality_rate * 100.0 / n_read_processed << " | "
+                        << setw(12) << setprecision(6) << n_read_high_low_quality_rate * 100.0 / n_read_filtered << " | "
                         << setw(12) << setprecision(6) << n_read_with_adapter << " | "
-                    //     << setw(12) << setprecision(6) << n_read_with_adapter * 100.0 / n_read_processed << " | "
-                    //     << setw(12) << setprecision(6) << n_read_with_adapter * 100.0 / n_read_filtered << " | "
+                        << setw(12) << setprecision(6) << n_read_with_adapter * 100.0 / n_read_processed << " | "
+                        << setw(12) << setprecision(6) << n_read_with_adapter * 100.0 / n_read_filtered << " | "
                         << endl;
                     ptime end_time = second_clock::local_time();
                     time_duration dt = end_time - start_time;
@@ -488,6 +492,40 @@ int main(int argc, char* argv[]) {
                 }
             case 2:
                 {
+                    cout << log_title() << "INFO " 
+                        << setw(12) << "Processed" << " | "
+                        << setw(12) << "Filtered" << " | "
+                        << setw(12) << "Ratio(%)" << " | "
+                        << setw(12) << "High" << " | "
+                        << setw(12) << "Ratio(%)" << " | "
+                        << setw(12) << "Ratio(%)" << " | "
+                        << setw(12) << "Low average" << " | "
+                        << setw(12) << "Ratio(%)" << " | "
+                        << setw(12) << "Ratio(%)" << " | "
+                        << setw(12) << "High low-" << " | "
+                        << setw(12) << "Ratio(%)" << " | "
+                        << setw(12) << "Ratio(%)" << " | " 
+                        << endl;
+                    cout << log_title() << "INFO "
+                        << setw(12) << "pairs" << " | "
+                        << setw(12) << "pairs" << " | "
+                        << setw(12) << "filtered" << " | "
+                        << setw(12) << "N-rate" << " | "
+                        << setw(12) << "in processed" << " | "
+                        << setw(12) << "in filtered" << " | "
+                        << setw(12) << "quality" << " | "
+                        << setw(12) << "in processed" << " | "
+                        << setw(12) << "in filtered" << " | "
+                        << setw(12) << "quality-rate" << " | "
+                        << setw(12) << "in processed" << " | "
+                        << setw(12) << "in filtered" << " | "
+                        << endl;
+                    cout << log_title() << "INFO ";
+                    for (int i = 0; i < 15 * 12; i++) {
+                        cout << "-";
+                    }
+                    cout << endl;
+
                     // iostream for the first fastq
                     ifstream infq1(raw_fq[0].c_str(), ios_base::in | ios_base::binary);
                     filtering_istream infq1_decompressor;
@@ -520,60 +558,11 @@ int main(int argc, char* argv[]) {
                     dropped_outfq2_compressor.push(gzip_compressor());
                     dropped_outfq2_compressor.push(dropped_outfq2);
 
-                    unordered_set<string> adapter_read_id[2];
-                    if (adapter.size() != 0) {
-                        for (int i = 0; i < 2; i++) {
-                            load_adapter(adapter[i], adapter_read_id[i]);
-                        }
-                    }
-
-                    cout << log_title() << "INFO -- Start filtering..." << endl;
-                    cout << log_title() << "INFO " 
-                        << setw(12) << "Processed" << " | "
-                        << setw(12) << "Filtered" << " | "
-                        << setw(12) << "Ratio(%)" << " | "
-                        << setw(12) << "High" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | "
-                        << setw(12) << "Low average" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | "
-                        << setw(12) << "High low-" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | " 
-                        << setw(12) << "With" << " | " 
-                    //     << setw(12) << "Ratio(%)" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | " 
-                        << endl;
-                    cout << log_title() << "INFO "
-                        << setw(12) << "pairs" << " | "
-                        << setw(12) << "pairs" << " | "
-                        << setw(12) << "filtered" << " | "
-                        << setw(12) << "N-rate" << " | "
-                    //     << setw(12) << "in processed" << " | "
-                    //     << setw(12) << "in filtered" << " | "
-                        << setw(12) << "quality" << " | "
-                    //     << setw(12) << "in processed" << " | "
-                    //     << setw(12) << "in filtered" << " | "
-                        << setw(12) << "quality-rate" << " | "
-                    //     << setw(12) << "in processed" << " | "
-                    //     << setw(12) << "in filtered" << " | "
-                        << setw(12) << "adapter" << " | "
-                    //     << setw(12) << "in processed" << " | "
-                    //     << setw(12) << "in filtered" << " | "
-                        << endl;
-                    cout << log_title() << "INFO ";
-                    for (int i = 0; i < 15 * 7; i++) {
-                        cout << "-";
-                    }
-                    cout << endl;
-
                     int n_pair_processed = 0,
                         n_pair_high_N_rate = 0,
                         n_pair_low_ave_quality = 0,
                         n_pair_high_low_quality_rate = 0,
-                        n_pair_filtered = 0,
-                        n_pair_with_adapter = 0;
+                        n_pair_filtered = 0;
                     bool is_filtered;
                     string read_id_line1, read_line1, plus_line1, quality_line1,
                            read_id_line2, read_line2, plus_line2, quality_line2;
@@ -588,17 +577,6 @@ int main(int argc, char* argv[]) {
                         
                         is_filtered = false;
                         
-                        if (adapter.size() != 0) {
-                            string s1 = read_id_line1.substr(1, read_id_line1.size() - 1);
-                            string s2 = read_id_line2.substr(1, read_id_line2.size() - 1);
-                            if (adapter_read_id[0].count(s1) > 0 || adapter_read_id[1].count(s2) > 0) {
-                                n_pair_with_adapter++;
-                                if (!is_filtered) {
-                                    n_pair_filtered++;
-                                    is_filtered = true;
-                                }
-                            }
-                        }
                         if (get_base_N_rate(read_line1) > max_base_N_rate || get_base_N_rate(read_line2) > max_base_N_rate) {
                             n_pair_high_N_rate++;
                             if (!is_filtered) {
@@ -628,15 +606,14 @@ int main(int argc, char* argv[]) {
                                 << setw(12) << setprecision(6) << n_pair_filtered << " | "
                                 << setw(12) << setprecision(6) << n_pair_filtered * 100.0 / n_pair_processed << " | "
                                 << setw(12) << setprecision(6) << n_pair_high_N_rate << " | "
-                            //     << setw(12) << setprecision(6) << n_pair_high_N_rate * 100.0 / n_pair_processed << " | "
-                            //     << setw(12) << setprecision(6) << n_pair_high_N_rate * 100.0 / n_pair_filtered << " | "
+                                << setw(12) << setprecision(6) << n_pair_high_N_rate * 100.0 / n_pair_processed << " | "
+                                << setw(12) << setprecision(6) << n_pair_high_N_rate * 100.0 / n_pair_filtered << " | "
                                 << setw(12) << setprecision(6) << n_pair_low_ave_quality << " | "
-                            //     << setw(12) << setprecision(6) << n_pair_low_ave_quality * 100.0 / n_pair_processed << " | "
-                            //     << setw(12) << setprecision(6) << n_pair_low_ave_quality * 100.0 / n_pair_filtered << " | "
+                                << setw(12) << setprecision(6) << n_pair_low_ave_quality * 100.0 / n_pair_processed << " | "
+                                << setw(12) << setprecision(6) << n_pair_low_ave_quality * 100.0 / n_pair_filtered << " | "
                                 << setw(12) << setprecision(6) << n_pair_high_low_quality_rate << " | "
-                            //     << setw(12) << setprecision(6) << n_pair_high_low_quality_rate * 100.0 / n_pair_processed << " | "
-                            //     << setw(12) << setprecision(6) << n_pair_high_low_quality_rate * 100.0 / n_pair_filtered << " | "
-                                << setw(12) << setprecision(6) << n_pair_with_adapter << " | "
+                                << setw(12) << setprecision(6) << n_pair_high_low_quality_rate * 100.0 / n_pair_processed << " | "
+                                << setw(12) << setprecision(6) << n_pair_high_low_quality_rate * 100.0 / n_pair_filtered << " | "
                                 << endl;
                         }
                         
@@ -682,15 +659,14 @@ int main(int argc, char* argv[]) {
                         << setw(12) << setprecision(6) << n_pair_filtered << " | "
                         << setw(12) << setprecision(6) << n_pair_filtered * 100.0 / n_pair_processed << " | "
                         << setw(12) << setprecision(6) << n_pair_high_N_rate << " | "
-                    //     << setw(12) << setprecision(6) << n_pair_high_N_rate * 100.0 / n_pair_processed << " | "
-                    //     << setw(12) << setprecision(6) << n_pair_high_N_rate * 100.0 / n_pair_filtered << " | "
+                        << setw(12) << setprecision(6) << n_pair_high_N_rate * 100.0 / n_pair_processed << " | "
+                        << setw(12) << setprecision(6) << n_pair_high_N_rate * 100.0 / n_pair_filtered << " | "
                         << setw(12) << setprecision(6) << n_pair_low_ave_quality << " | "
-                    //     << setw(12) << setprecision(6) << n_pair_low_ave_quality * 100.0 / n_pair_processed << " | "
-                    //     << setw(12) << setprecision(6) << n_pair_low_ave_quality * 100.0 / n_pair_filtered << " | "
+                        << setw(12) << setprecision(6) << n_pair_low_ave_quality * 100.0 / n_pair_processed << " | "
+                        << setw(12) << setprecision(6) << n_pair_low_ave_quality * 100.0 / n_pair_filtered << " | "
                         << setw(12) << setprecision(6) << n_pair_high_low_quality_rate << " | "
-                    //     << setw(12) << setprecision(6) << n_pair_high_low_quality_rate * 100.0 / n_pair_processed << " | "
-                    //     << setw(12) << setprecision(6) << n_pair_high_low_quality_rate * 100.0 / n_pair_filtered << " | "
-                        << setw(12) << setprecision(6) << n_pair_with_adapter << " | "
+                        << setw(12) << setprecision(6) << n_pair_high_low_quality_rate * 100.0 / n_pair_processed << " | "
+                        << setw(12) << setprecision(6) << n_pair_high_low_quality_rate * 100.0 / n_pair_filtered << " | "
                         << endl;
                     ptime end_time = second_clock::local_time();
                     time_duration dt = end_time - start_time;
