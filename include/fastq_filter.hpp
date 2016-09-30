@@ -6,5 +6,14 @@ namespace fastq_filter {
     float get_base_N_rate(const std::string&);
     float get_average_quality(const std::string&, const int);
     float get_low_quality_rate(const std::string&, const int, const int);
-    void load_adapter(boost::filesystem::path&, std::unordered_set<std::string>&);
+    std::unordered_set<std::string> load_adapter(boost::filesystem::path&);
+    void processor(std::vector<boost::filesystem::path>&,
+            std::vector<boost::filesystem::path>&,
+            std::vector<boost::filesystem::path>&,
+            std::vector< std::unordered_set<std::string> >&,
+            int*,
+            float*,
+            unsigned int*,
+            int*);
+    void merge(std::vector<boost::filesystem::path>&, std::vector<boost::filesystem::path>&, int);
 }

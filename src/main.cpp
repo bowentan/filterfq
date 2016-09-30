@@ -3,6 +3,7 @@
 #include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iostreams/filter/gzip.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/thread.hpp>
 #include <command_options.hpp>
 #include <fastq_filter.hpp>
 #include <quality_system.hpp>
@@ -27,13 +28,14 @@ int main(int argc, char* argv[]) {
     try {
         ptime start_time = second_clock::local_time();
         // input variables
-        bool does_check_quality_sys;
         const string quality_sys[5] = {"Sanger", "Solexa", "Illumina 1.3+", "Illumina 1.5+", "Illumina 1.8+"};
-        int raw_quality_sys;
+        bool does_check_quality_sys;
         bool prefer_specified_raw_quality_sys;
+        int n_thread;
+        int raw_quality_sys;
+        int min_base_quality;
         float max_base_N_rate;
         float min_ave_quality;
-        int min_base_quality;
         float max_low_quality_rate;
         vector<path> adapter;
         vector<path> raw_fq;
@@ -45,10 +47,10 @@ int main(int argc, char* argv[]) {
         vector<path> clean_fq;
         vector<path> dropped_fq;
         
-        
         options_description generic("Gerneric options");
         generic.add_options()
             ("help,h", "produce help message")
+            ("thread,t", value<int>(&n_thread) -> default_value(8), "specify the number of threads to use")
         ;
         
         options_description param("Input parameters & files", options_description::m_default_line_length * 2, options_description::m_default_line_length);
@@ -295,416 +297,99 @@ int main(int argc, char* argv[]) {
         }
 
 
-        switch(raw_fq.size()) {
-            case 1: 
-                {
-                    ifstream infq(raw_fq[0].c_str(), ios_base::in | ios_base::binary);
-                    filtering_istream infq_decompressor;
-                    infq_decompressor.push(gzip_decompressor());
-                    infq_decompressor.push(infq);
+        unsigned int counter[6] = {0, 0, 0, 0, 0, 0};
+        int param_int[3] = {min_base_quality, raw_quality_sys, clean_quality_sys};
+        float param_float[3] = {max_base_N_rate, min_ave_quality, max_low_quality_rate};
+        boost::thread t[n_thread];
+        int thread_info[n_thread][3];
 
-                    ofstream clean_outfq(clean_fq[0].c_str(), ios_base::out | ios_base::binary);
-                    filtering_ostream clean_outfq_compressor;
-                    clean_outfq_compressor.push(gzip_compressor());
-                    clean_outfq_compressor.push(clean_outfq);
-
-                    ofstream dropped_outfq(dropped_fq[0].c_str(), ios_base::out | ios_base::binary);
-                    filtering_ostream dropped_outfq_compressor;
-                    dropped_outfq_compressor.push(gzip_compressor());
-                    dropped_outfq_compressor.push(dropped_outfq);
-                    
-                    unordered_set<string> adapter_read_id;
-                    if (adapter.size() != 0) {
-                        load_adapter(adapter[0], adapter_read_id);
-                    }
-
-                    cout << log_title() << "INFO -- Start filtering..." << endl;
-                    cout << log_title() << "INFO " 
-                        << setw(12) << "Processed" << " | "
-                        << setw(12) << "Filtered" << " | "
-                        << setw(12) << "Ratio(%)" << " | "
-                        << setw(12) << "High" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | "
-                        << setw(12) << "Low average" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | "
-                        << setw(12) << "High low-" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | " 
-                        << setw(12) << "With" << " | " 
-                    //     << setw(12) << "Ratio(%)" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | " 
-                        << endl;
-                    cout << log_title() << "INFO "
-                        << setw(12) << "reads" << " | "
-                        << setw(12) << "reads" << " | "
-                        << setw(12) << "filtered" << " | "
-                        << setw(12) << "N-rate" << " | "
-                    //     << setw(12) << "in processed" << " | "
-                    //     << setw(12) << "in filtered" << " | "
-                        << setw(12) << "quality" << " | "
-                    //     << setw(12) << "in processed" << " | "
-                    //     << setw(12) << "in filtered" << " | "
-                        << setw(12) << "quality-rate" << " | "
-                    //     << setw(12) << "in processed" << " | "
-                    //     << setw(12) << "in filtered" << " | "
-                        << setw(12) << "adapter" << " | "
-                    //     << setw(12) << "in processed" << " | "
-                    //     << setw(12) << "in filtered" << " | "
-                        << endl;
-                    cout << log_title() << "INFO ";
-                    for (int i = 0; i < 15 * 7; i++) {
-                        cout << "-";
-                    }
-                    cout << endl;
-
-                    int n_read_processed = 0,
-                        n_read_high_N_rate = 0,
-                        n_read_low_ave_quality = 0,
-                        n_read_high_low_quality_rate = 0,
-                        n_read_filtered = 0,
-                        n_read_with_adapter = 0;
-                    bool is_filtered;
-                    string read_id_line, read_line, plus_line, quality_line;
-                    while (getline(infq_decompressor, read_id_line)) {
-                        getline(infq_decompressor, read_line);
-                        getline(infq_decompressor, plus_line);
-                        getline(infq_decompressor, quality_line);
-                        n_read_processed++;
-                        
-                        
-                        is_filtered = false;
-                        // cout << read_id_line << endl
-                        //     << read_line << endl 
-                        //     << plus_line << endl
-                        //     << quality_line << endl;
-                        // cout << get_base_N_rate(read_line) << " "
-                        //     << get_average_quality(quality_line, raw_quality_sys) << " "
-                        //     << get_low_quality_rate(quality_line, raw_quality_sys, min_base_quality) << endl;
-                        if (adapter.size() != 0) {
-                            string s = read_id_line.substr(1, read_id_line.size() - 1);
-                            if (adapter_read_id.count(s) > 0) {
-                                n_read_with_adapter++;
-                                if (!is_filtered) {
-                                    n_read_filtered++;
-                                    is_filtered = true;
-                                }
-                            }
-                        }
-                        if (get_base_N_rate(read_line) > max_base_N_rate) {
-                            n_read_high_N_rate++;
-                            if (!is_filtered) {
-                                n_read_filtered++;
-                                is_filtered = true;
-                            }
-                        }
-                        if (get_average_quality(quality_line, raw_quality_sys) < min_ave_quality) {
-                            n_read_low_ave_quality++;
-                            if (!is_filtered) {
-                                n_read_filtered++;
-                                is_filtered = true;
-                            }
-                        }
-                        if (get_low_quality_rate(quality_line, raw_quality_sys, min_base_quality) > max_low_quality_rate) {
-                            n_read_high_low_quality_rate++;
-                            if (!is_filtered) {
-                                n_read_filtered++;
-                                is_filtered = true;
-                            }
-                        }
-                        
-                        if (n_read_processed % 50000 == 0) {
-                            cout << log_title() << "INFO " 
-                                << fixed
-                                << setw(12) << setprecision(6) << n_read_processed << " | "
-                                << setw(12) << setprecision(6) << n_read_filtered << " | "
-                                << setw(12) << setprecision(6) << n_read_filtered * 100.0 / n_read_processed << " | "
-                                << setw(12) << setprecision(6) << n_read_high_N_rate << " | "
-                            //     << setw(12) << setprecision(6) << n_read_high_N_rate * 100.0 / n_read_processed << " | "
-                            //     << setw(12) << setprecision(6) << n_read_high_N_rate * 100.0 / n_read_filtered << " | "
-                                << setw(12) << setprecision(6) << n_read_low_ave_quality << " | "
-                            //     << setw(12) << setprecision(6) << n_read_low_ave_quality * 100.0 / n_read_processed << " | "
-                            //     << setw(12) << setprecision(6) << n_read_low_ave_quality * 100.0 / n_read_filtered << " | "
-                                << setw(12) << setprecision(6) << n_read_high_low_quality_rate << " | "
-                            //     << setw(12) << setprecision(6) << n_read_high_low_quality_rate * 100.0 / n_read_processed << " | "
-                            //     << setw(12) << setprecision(6) << n_read_high_low_quality_rate * 100.0 / n_read_filtered << " | "
-                                << setw(12) << setprecision(6) << n_read_with_adapter << " | "
-                            //     << setw(12) << setprecision(6) << n_read_with_adapter * 100.0 / n_read_processed << " | "
-                            //     << setw(12) << setprecision(6) << n_read_with_adapter * 100.0 / n_read_filtered << " | "
-                                << endl;
-                        }
-
-                        if (!is_filtered) {
-                            if (raw_quality_sys != clean_quality_sys) {
-                                quality_system_convert(quality_line, raw_quality_sys, clean_quality_sys);
-                            }
-                            // cout << get_base_N_rate(read_line) << " "
-                            //     << get_average_quality(quality_line, clean_quality_sys) << " "
-                            //     << get_low_quality_rate(quality_line, clean_quality_sys, base_quality) << endl;
-                            clean_outfq_compressor << read_id_line << endl
-                                << read_line << endl
-                                << plus_line << endl
-                                << quality_line << endl;
-                        }
-                        else {
-                            dropped_outfq_compressor << read_id_line << endl
-                                << read_line << endl
-                                << plus_line << endl
-                                << quality_line << endl;
-                        }
-                    }
-                    close(infq_decompressor, ios_base::in);
-                    close(clean_outfq_compressor, ios_base::out);
-                    close(dropped_outfq_compressor, ios_base::out);
-                    cout << log_title() << "INFO ";
-                    for (int i = 0; i < 15 * 7; i++) {
-                        cout << "-";
-                    }
-                    cout << endl;
-                    cout << log_title() << "INFO " 
-                        << fixed
-                        << setw(12) << setprecision(6) << n_read_processed << " | "
-                        << setw(12) << setprecision(6) << n_read_filtered << " | "
-                        << setw(12) << setprecision(6) << n_read_filtered * 100.0 / n_read_processed << " | "
-                        << setw(12) << setprecision(6) << n_read_high_N_rate << " | "
-                    //     << setw(12) << setprecision(6) << n_read_high_N_rate * 100.0 / n_read_processed << " | "
-                    //     << setw(12) << setprecision(6) << n_read_high_N_rate * 100.0 / n_read_filtered << " | "
-                        << setw(12) << setprecision(6) << n_read_low_ave_quality << " | "
-                    //     << setw(12) << setprecision(6) << n_read_low_ave_quality * 100.0 / n_read_processed << " | "
-                    //     << setw(12) << setprecision(6) << n_read_low_ave_quality * 100.0 / n_read_filtered << " | "
-                        << setw(12) << setprecision(6) << n_read_high_low_quality_rate << " | "
-                    //     << setw(12) << setprecision(6) << n_read_high_low_quality_rate * 100.0 / n_read_processed << " | "
-                    //     << setw(12) << setprecision(6) << n_read_high_low_quality_rate * 100.0 / n_read_filtered << " | "
-                        << setw(12) << setprecision(6) << n_read_with_adapter << " | "
-                    //     << setw(12) << setprecision(6) << n_read_with_adapter * 100.0 / n_read_processed << " | "
-                    //     << setw(12) << setprecision(6) << n_read_with_adapter * 100.0 / n_read_filtered << " | "
-                        << endl;
-                    ptime end_time = second_clock::local_time();
-                    time_duration dt = end_time - start_time;
-                    cout << log_title() << "INFO -- Process finished successfully! "
-                        << dt.total_seconds() << " seconds elapsed. Thank you for using filterfq!" << endl;
-                    break;
-                }
-            case 2:
-                {
-                    // iostream for the first fastq
-                    ifstream infq1(raw_fq[0].c_str(), ios_base::in | ios_base::binary);
-                    filtering_istream infq1_decompressor;
-                    infq1_decompressor.push(gzip_decompressor());
-                    infq1_decompressor.push(infq1);
-
-                    ofstream clean_outfq1(clean_fq[0].c_str(), ios_base::out | ios_base::binary);
-                    filtering_ostream clean_outfq1_compressor;
-                    clean_outfq1_compressor.push(gzip_compressor());
-                    clean_outfq1_compressor.push(clean_outfq1);
-
-                    ofstream dropped_outfq1(dropped_fq[0].c_str(), ios_base::out | ios_base::binary);
-                    filtering_ostream dropped_outfq1_compressor;
-                    dropped_outfq1_compressor.push(gzip_compressor());
-                    dropped_outfq1_compressor.push(dropped_outfq1);
-                    
-                    // iostream for the second fastq
-                    ifstream infq2(raw_fq[1].c_str(), ios_base::in | ios_base::binary);
-                    filtering_istream infq2_decompressor;
-                    infq2_decompressor.push(gzip_decompressor());
-                    infq2_decompressor.push(infq2);
-
-                    ofstream clean_outfq2(clean_fq[1].c_str(), ios_base::out | ios_base::binary);
-                    filtering_ostream clean_outfq2_compressor;
-                    clean_outfq2_compressor.push(gzip_compressor());
-                    clean_outfq2_compressor.push(clean_outfq2);
-
-                    ofstream dropped_outfq2(dropped_fq[1].c_str(), ios_base::out | ios_base::binary);
-                    filtering_ostream dropped_outfq2_compressor;
-                    dropped_outfq2_compressor.push(gzip_compressor());
-                    dropped_outfq2_compressor.push(dropped_outfq2);
-
-                    unordered_set<string> adapter_read_id[2];
-                    if (adapter.size() != 0) {
-                        for (int i = 0; i < 2; i++) {
-                            load_adapter(adapter[i], adapter_read_id[i]);
-                        }
-                    }
-
-                    cout << log_title() << "INFO -- Start filtering..." << endl;
-                    cout << log_title() << "INFO " 
-                        << setw(12) << "Processed" << " | "
-                        << setw(12) << "Filtered" << " | "
-                        << setw(12) << "Ratio(%)" << " | "
-                        << setw(12) << "High" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | "
-                        << setw(12) << "Low average" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | "
-                        << setw(12) << "High low-" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | " 
-                        << setw(12) << "With" << " | " 
-                    //     << setw(12) << "Ratio(%)" << " | "
-                    //     << setw(12) << "Ratio(%)" << " | " 
-                        << endl;
-                    cout << log_title() << "INFO "
-                        << setw(12) << "pairs" << " | "
-                        << setw(12) << "pairs" << " | "
-                        << setw(12) << "filtered" << " | "
-                        << setw(12) << "N-rate" << " | "
-                    //     << setw(12) << "in processed" << " | "
-                    //     << setw(12) << "in filtered" << " | "
-                        << setw(12) << "quality" << " | "
-                    //     << setw(12) << "in processed" << " | "
-                    //     << setw(12) << "in filtered" << " | "
-                        << setw(12) << "quality-rate" << " | "
-                    //     << setw(12) << "in processed" << " | "
-                    //     << setw(12) << "in filtered" << " | "
-                        << setw(12) << "adapter" << " | "
-                    //     << setw(12) << "in processed" << " | "
-                    //     << setw(12) << "in filtered" << " | "
-                        << endl;
-                    cout << log_title() << "INFO ";
-                    for (int i = 0; i < 15 * 7; i++) {
-                        cout << "-";
-                    }
-                    cout << endl;
-
-                    int n_pair_processed = 0,
-                        n_pair_high_N_rate = 0,
-                        n_pair_low_ave_quality = 0,
-                        n_pair_high_low_quality_rate = 0,
-                        n_pair_filtered = 0,
-                        n_pair_with_adapter = 0;
-                    bool is_filtered;
-                    string read_id_line1, read_line1, plus_line1, quality_line1,
-                           read_id_line2, read_line2, plus_line2, quality_line2;
-                    while (getline(infq1_decompressor, read_id_line1) && getline(infq2_decompressor, read_id_line2)) {
-                        getline(infq1_decompressor, read_line1);
-                        getline(infq1_decompressor, plus_line1);
-                        getline(infq1_decompressor, quality_line1);
-                        getline(infq2_decompressor, read_line2);
-                        getline(infq2_decompressor, plus_line2);
-                        getline(infq2_decompressor, quality_line2);
-                        n_pair_processed++;
-                        
-                        is_filtered = false;
-                        
-                        if (adapter.size() != 0) {
-                            string s1 = read_id_line1.substr(1, read_id_line1.size() - 1);
-                            string s2 = read_id_line2.substr(1, read_id_line2.size() - 1);
-                            if (adapter_read_id[0].count(s1) > 0 || adapter_read_id[1].count(s2) > 0) {
-                                n_pair_with_adapter++;
-                                if (!is_filtered) {
-                                    n_pair_filtered++;
-                                    is_filtered = true;
-                                }
-                            }
-                        }
-                        if (get_base_N_rate(read_line1) > max_base_N_rate || get_base_N_rate(read_line2) > max_base_N_rate) {
-                            n_pair_high_N_rate++;
-                            if (!is_filtered) {
-                                n_pair_filtered++;
-                                is_filtered = true;
-                            }
-                        }
-                        if (get_average_quality(quality_line1, raw_quality_sys) < min_ave_quality || get_average_quality(quality_line2, raw_quality_sys) < min_ave_quality) {
-                            n_pair_low_ave_quality++;
-                            if (!is_filtered) {
-                                n_pair_filtered++;
-                                is_filtered = true;
-                            }
-                        }
-                        if (get_low_quality_rate(quality_line1, raw_quality_sys, min_base_quality) > max_low_quality_rate || get_low_quality_rate(quality_line2, raw_quality_sys, min_base_quality) > max_low_quality_rate) {
-                            n_pair_high_low_quality_rate++;
-                            if (!is_filtered) {
-                                n_pair_filtered++;
-                                is_filtered = true;
-                            }
-                        }
-
-                        if (n_pair_processed % 50000 == 0) {
-                            cout << log_title() << "INFO " 
-                                << fixed
-                                << setw(12) << setprecision(6) << n_pair_processed << " | "
-                                << setw(12) << setprecision(6) << n_pair_filtered << " | "
-                                << setw(12) << setprecision(6) << n_pair_filtered * 100.0 / n_pair_processed << " | "
-                                << setw(12) << setprecision(6) << n_pair_high_N_rate << " | "
-                            //     << setw(12) << setprecision(6) << n_pair_high_N_rate * 100.0 / n_pair_processed << " | "
-                            //     << setw(12) << setprecision(6) << n_pair_high_N_rate * 100.0 / n_pair_filtered << " | "
-                                << setw(12) << setprecision(6) << n_pair_low_ave_quality << " | "
-                            //     << setw(12) << setprecision(6) << n_pair_low_ave_quality * 100.0 / n_pair_processed << " | "
-                            //     << setw(12) << setprecision(6) << n_pair_low_ave_quality * 100.0 / n_pair_filtered << " | "
-                                << setw(12) << setprecision(6) << n_pair_high_low_quality_rate << " | "
-                            //     << setw(12) << setprecision(6) << n_pair_high_low_quality_rate * 100.0 / n_pair_processed << " | "
-                            //     << setw(12) << setprecision(6) << n_pair_high_low_quality_rate * 100.0 / n_pair_filtered << " | "
-                                << setw(12) << setprecision(6) << n_pair_with_adapter << " | "
-                                << endl;
-                        }
-                        
-                        if (!is_filtered) {
-                            if (raw_quality_sys != clean_quality_sys) {
-                                quality_system_convert(quality_line1, raw_quality_sys, clean_quality_sys);
-                                quality_system_convert(quality_line2, raw_quality_sys, clean_quality_sys);
-                            }
-                            clean_outfq1_compressor << read_id_line1 << endl
-                                << read_line1 << endl
-                                << plus_line1 << endl
-                                << quality_line1 << endl;
-                            clean_outfq2_compressor << read_id_line2 << endl
-                                << read_line2 << endl
-                                << plus_line2 << endl
-                                << quality_line2 << endl;
-                        }
-                        else {
-                            dropped_outfq1_compressor << read_id_line1 << endl
-                                << read_line1 << endl
-                                << plus_line1 << endl
-                                << quality_line1 << endl;
-                            dropped_outfq2_compressor << read_id_line2 << endl
-                                << read_line2 << endl
-                                << plus_line2 << endl
-                                << quality_line2 << endl;
-                        }
-                    }
-                    close(infq1_decompressor, ios_base::in);
-                    close(infq2_decompressor, ios_base::in);
-                    close(clean_outfq1_compressor, ios_base::out);
-                    close(clean_outfq2_compressor, ios_base::out);
-                    close(dropped_outfq1_compressor, ios_base::out);
-                    close(dropped_outfq2_compressor, ios_base::out);
-                    cout << log_title() << "INFO ";
-                    for (int i = 0; i < 15 * 12; i++) {
-                        cout << "-";
-                    }
-                    cout << endl;
-                    cout << log_title() << "INFO " 
-                        << fixed
-                        << setw(12) << setprecision(6) << n_pair_processed << " | "
-                        << setw(12) << setprecision(6) << n_pair_filtered << " | "
-                        << setw(12) << setprecision(6) << n_pair_filtered * 100.0 / n_pair_processed << " | "
-                        << setw(12) << setprecision(6) << n_pair_high_N_rate << " | "
-                    //     << setw(12) << setprecision(6) << n_pair_high_N_rate * 100.0 / n_pair_processed << " | "
-                    //     << setw(12) << setprecision(6) << n_pair_high_N_rate * 100.0 / n_pair_filtered << " | "
-                        << setw(12) << setprecision(6) << n_pair_low_ave_quality << " | "
-                    //     << setw(12) << setprecision(6) << n_pair_low_ave_quality * 100.0 / n_pair_processed << " | "
-                    //     << setw(12) << setprecision(6) << n_pair_low_ave_quality * 100.0 / n_pair_filtered << " | "
-                        << setw(12) << setprecision(6) << n_pair_high_low_quality_rate << " | "
-                    //     << setw(12) << setprecision(6) << n_pair_high_low_quality_rate * 100.0 / n_pair_processed << " | "
-                    //     << setw(12) << setprecision(6) << n_pair_high_low_quality_rate * 100.0 / n_pair_filtered << " | "
-                        << setw(12) << setprecision(6) << n_pair_with_adapter << " | "
-                        << endl;
-                    ptime end_time = second_clock::local_time();
-                    time_duration dt = end_time - start_time;
-                    cout << log_title() << "INFO -- Process finished successfully! "
-                        << dt.total_seconds() << " seconds elapsed. Thank you for using filterfq!" << endl;
-                    break;
-                }
+        vector< unordered_set<string> > adapter_read_id_lists;
+        if (adapter.size() != 0) {
+            for (vector<path>::iterator p = adapter.begin(); p != adapter.end(); p++)
+                adapter_read_id_lists.push_back(load_adapter(*p));
         }
+
+        cout << log_title() << "INFO -- Start filtering..." << endl;
+        cout << log_title() << "INFO " 
+            << setw(12) << "Processed" << " | "
+            << setw(12) << "Filtered" << " | "
+            << setw(12) << "Ratio(%)" << " | "
+            << setw(12) << "High" << " | "
+            //     << setw(12) << "Ratio(%)" << " | "
+            //     << setw(12) << "Ratio(%)" << " | "
+            << setw(12) << "Low average" << " | "
+            //     << setw(12) << "Ratio(%)" << " | "
+            //     << setw(12) << "Ratio(%)" << " | "
+            << setw(12) << "High low-" << " | "
+            //     << setw(12) << "Ratio(%)" << " | "
+            //     << setw(12) << "Ratio(%)" << " | " 
+            << setw(12) << "With" << " | " 
+            //     << setw(12) << "Ratio(%)" << " | "
+            //     << setw(12) << "Ratio(%)" << " | " 
+            << endl;
+        cout << log_title() << "INFO "
+            << setw(12) << "reads" << " | "
+            << setw(12) << "reads" << " | "
+            << setw(12) << "filtered" << " | "
+            << setw(12) << "N-rate" << " | "
+            //     << setw(12) << "in processed" << " | "
+            //     << setw(12) << "in filtered" << " | "
+            << setw(12) << "quality" << " | "
+            //     << setw(12) << "in processed" << " | "
+            //     << setw(12) << "in filtered" << " | "
+            << setw(12) << "quality-rate" << " | "
+            //     << setw(12) << "in processed" << " | "
+            //     << setw(12) << "in filtered" << " | "
+            << setw(12) << "adapter" << " | "
+            //     << setw(12) << "in processed" << " | "
+            //     << setw(12) << "in filtered" << " | "
+            << endl;
+        cout << log_title() << "INFO ";
+        for (int i = 0; i < 15 * 7; i++) {
+            cout << "-";
+        }
+        cout << endl;
+
+        for (int i = 0; i < n_thread; ++i) {
+            thread_info[i][0] = 500000;
+            thread_info[i][1] = n_thread;
+            thread_info[i][2] = i;
+            t[i] = boost::thread(processor, raw_fq, clean_fq, dropped_fq, adapter_read_id_lists, param_int, param_float, counter, thread_info[i]);
+        }
+
+        for (int i = 0; i < n_thread; ++i)
+            t[i].join();
+
+        cout << log_title() << "INFO ";
+        for (int i = 0; i < 15 * 7; i++) {
+            cout << "-";
+        }
+
+        cout << endl;
+        cout << log_title() << "INFO " 
+            << fixed
+            << setw(12) << setprecision(6) << counter[0] << " | "
+            << setw(12) << setprecision(6) << counter[1] << " | "
+            << setw(12) << setprecision(6) << counter[1] * 100.0 / counter[0] << " | "
+            << setw(12) << setprecision(6) << counter[2] << " | "
+            << setw(12) << setprecision(6) << counter[3] << " | "
+            << setw(12) << setprecision(6) << counter[4] << " | "
+            << setw(12) << setprecision(6) << counter[5] << " | "
+            << endl;
+
+        cout << log_title() << "INFO -- Merging tmp files..." << endl;
+        merge(clean_fq, dropped_fq, n_thread);
+        cout << log_title() << "INFO -- Merge completed!" << endl;
+
+        ptime end_time = second_clock::local_time();
+        time_duration dt = end_time - start_time;
+        cout << log_title() << "INFO -- Process finished successfully! "
+            << dt.total_seconds() << " seconds elapsed. Thank you for using filterfq!" << endl;
     }
     catch(exception& e) {
         cerr << "error: " << e.what() << "\n";
         return 1;
-    }
-    catch(...) {
+    } catch(...) {
         cerr << "Exception of unknown type!\n";
     }
 

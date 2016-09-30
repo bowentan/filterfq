@@ -9,7 +9,7 @@ SRCEXT := cpp
 SOURCES := $(shell find $(SRCDIR) -type f -name *.$(SRCEXT))
 OBJECTS := $(patsubst $(SRCDIR)/%,$(BUILDDIR)/%,$(SOURCES:.$(SRCEXT)=.o))
 CFLAGS := -g -std=c++11
-LIB := -pthread -L lib -lboost_program_options -lboost_system -lboost_filesystem -lboost_iostreams -lboost_date_time
+LIB := -pthread -L lib -lboost_program_options -lboost_system -lboost_filesystem -lboost_iostreams -lboost_date_time -lboost_thread
 INC := -I include
 
 $(TARGET): $(OBJECTS)
