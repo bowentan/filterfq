@@ -141,6 +141,7 @@ namespace fastq_filter {
     void processor(std::vector<boost::filesystem::path>& infiles,
             std::vector<boost::filesystem::path>& clean_outfiles,
             std::vector<boost::filesystem::path>& dropped_outfiles,
+            boost::filesystem::path& tmp_dir,
             std::vector< std::unordered_set<std::string> >& adapter_read_id_lists,
             int* param_int,
             float* param_float,
@@ -163,12 +164,12 @@ namespace fastq_filter {
             infq_decompressor.push(boost::iostreams::gzip_decompressor());
             infq_decompressor.push(infq);
 
-            std::ofstream clean_outfq(clean_outfiles[0].string() + "." + std::to_string(thread) + ".tmp", std::ios_base::out | std::ios_base::binary); 
+            std::ofstream clean_outfq((tmp_dir / clean_outfiles[0].filename()).string() + "." + std::to_string(thread) + ".tmp", std::ios_base::out | std::ios_base::binary); 
             boost::iostreams::filtering_ostream clean_outfq_compressor;
             clean_outfq_compressor.push(boost::iostreams::gzip_compressor());
             clean_outfq_compressor.push(clean_outfq);
 
-            std::ofstream dropped_outfq(dropped_outfiles[0].string() + "." + std::to_string(thread) + ".tmp", std::ios_base::out | std::ios_base::binary);
+            std::ofstream dropped_outfq((tmp_dir / dropped_outfiles[0].filename()).string() + "." + std::to_string(thread) + ".tmp", std::ios_base::out | std::ios_base::binary);
             boost::iostreams::filtering_ostream dropped_outfq_compressor;
             dropped_outfq_compressor.push(boost::iostreams::gzip_compressor());
             dropped_outfq_compressor.push(dropped_outfq);
@@ -282,8 +283,8 @@ namespace fastq_filter {
             infq1_decompressor.push(infq1);
             infq2_decompressor.push(infq2);
 
-            std::ofstream clean_outfq1(clean_outfiles[0].string() + "." + std::to_string(thread) + ".tmp", std::ios_base::out | std::ios_base::binary); 
-            std::ofstream clean_outfq2(clean_outfiles[1].string() + "." + std::to_string(thread) + ".tmp", std::ios_base::out | std::ios_base::binary); 
+            std::ofstream clean_outfq1((tmp_dir / clean_outfiles[0].filename()).string() + "." + std::to_string(thread) + ".tmp", std::ios_base::out | std::ios_base::binary); 
+            std::ofstream clean_outfq2((tmp_dir / clean_outfiles[1].filename()).string() + "." + std::to_string(thread) + ".tmp", std::ios_base::out | std::ios_base::binary); 
             boost::iostreams::filtering_ostream clean_outfq1_compressor;
             boost::iostreams::filtering_ostream clean_outfq2_compressor;
             clean_outfq1_compressor.push(boost::iostreams::gzip_compressor());
@@ -291,8 +292,8 @@ namespace fastq_filter {
             clean_outfq1_compressor.push(clean_outfq1);
             clean_outfq2_compressor.push(clean_outfq2);
 
-            std::ofstream dropped_outfq1(dropped_outfiles[0].string() + "." + std::to_string(thread) + ".tmp", std::ios_base::out | std::ios_base::binary);
-            std::ofstream dropped_outfq2(dropped_outfiles[1].string() + "." + std::to_string(thread) + ".tmp", std::ios_base::out | std::ios_base::binary);
+            std::ofstream dropped_outfq1((tmp_dir / dropped_outfiles[0].filename()).string() + "." + std::to_string(thread) + ".tmp", std::ios_base::out | std::ios_base::binary);
+            std::ofstream dropped_outfq2((tmp_dir / dropped_outfiles[1].filename()).string() + "." + std::to_string(thread) + ".tmp", std::ios_base::out | std::ios_base::binary);
             boost::iostreams::filtering_ostream dropped_outfq1_compressor;
             boost::iostreams::filtering_ostream dropped_outfq2_compressor;
             dropped_outfq1_compressor.push(boost::iostreams::gzip_compressor());
@@ -422,7 +423,10 @@ namespace fastq_filter {
         }
     }
 
-    void merge(std::vector<boost::filesystem::path>& clean_outfiles, std::vector<boost::filesystem::path>& dropped_outfiles, int n_thread) {
+    void merge(std::vector<boost::filesystem::path>& clean_outfiles,
+            std::vector<boost::filesystem::path>& dropped_outfiles,
+            boost::filesystem::path& tmp_dir,
+            int n_thread) {
         std::ofstream clean_out[clean_outfiles.size()];
         std::ofstream dropped_out[dropped_outfiles.size()];
         for (int i = 0; i < clean_outfiles.size(); i++) {
@@ -432,14 +436,19 @@ namespace fastq_filter {
         
         for (int i = 0; i < clean_outfiles.size(); i++) {
             for (int j = 0; j < n_thread; j++) {
-                std::ifstream clean_file(clean_outfiles[i].string() + "." + std::to_string(j) + ".tmp", std::ios_base::in | std::ios_base::binary);
-                std::ifstream dropped_file(dropped_outfiles[i].string() + "." + std::to_string(j) + ".tmp", std::ios_base::in | std::ios_base::binary);
+                std::string clean_filename = (tmp_dir / clean_outfiles[i].filename()).string() + "." + std::to_string(j) + ".tmp";
+                std::string dropped_filename = (tmp_dir / dropped_outfiles[i].filename()).string() + "." + std::to_string(j) + ".tmp";
+                std::ifstream clean_file(clean_filename, std::ios_base::in | std::ios_base::binary);
+                std::ifstream dropped_file(dropped_filename, std::ios_base::in | std::ios_base::binary);
 
                 clean_out[i] << clean_file.rdbuf();
                 dropped_out[i] << dropped_file.rdbuf();
 
                 clean_file.close();
                 dropped_file.close();
+
+                boost::filesystem::remove(clean_filename);
+                boost::filesystem::remove(dropped_filename);
             }
         }
         

@@ -37,6 +37,7 @@ int main(int argc, char* argv[]) {
         float max_base_N_rate;
         float min_ave_quality;
         float max_low_quality_rate;
+        path tmp_dir;
         vector<path> adapter;
         vector<path> raw_fq;
 
@@ -51,6 +52,7 @@ int main(int argc, char* argv[]) {
         generic.add_options()
             ("help,h", "produce help message")
             ("thread,t", value<int>(&n_thread) -> default_value(8), "specify the number of threads to use")
+            ("tmpDir,T", value<path>(&tmp_dir) -> default_value(temp_directory_path()), "specify the directory to store temporary files")
         ;
         
         options_description param("Input parameters & files", options_description::m_default_line_length * 2, options_description::m_default_line_length);
@@ -69,7 +71,7 @@ int main(int argc, char* argv[]) {
         options_description output("Output parameters & files", options_description::m_default_line_length * 2, options_description::m_default_line_length);
         output.add_options()
             ("cleanQualitySystem,S", value<int>(&clean_quality_sys) -> default_value(4), "specify quality system of cleaned fastq, the same as rawQualitySystem")
-            ("outDir,O", value<path>(&out_dir) -> default_value(current_path().string()), "specify output directory, not used if cleanFastq is specified")
+            ("outDir,O", value<path>(&out_dir) -> default_value(current_path()), "specify output directory, not used if cleanFastq is specified")
             ("outBasename,o", value<string>(&out_basename), "specify the basename for output file(s), required if outDir is specified")
             ("cleanFastq,F", value< vector<path> >(&clean_fq) -> multitoken(), "cleaned fastq file name(s), not used if outDir or outBasename is specified")
             ("droppedFastq,D", value< vector<path> >(&dropped_fq) -> multitoken(), "fastq file(s) containing reads that are filtered out")
@@ -354,7 +356,16 @@ int main(int argc, char* argv[]) {
             thread_info[i][0] = 500000;
             thread_info[i][1] = n_thread;
             thread_info[i][2] = i;
-            t[i] = boost::thread(processor, raw_fq, clean_fq, dropped_fq, adapter_read_id_lists, param_int, param_float, counter, thread_info[i]);
+            t[i] = boost::thread(processor, 
+                    raw_fq, 
+                    clean_fq, 
+                    dropped_fq, 
+                    tmp_dir,
+                    adapter_read_id_lists, 
+                    param_int, 
+                    param_float, 
+                    counter, 
+                    thread_info[i]);
         }
 
         for (int i = 0; i < n_thread; ++i)
@@ -378,7 +389,7 @@ int main(int argc, char* argv[]) {
             << endl;
 
         cout << log_title() << "INFO -- Merging tmp files..." << endl;
-        merge(clean_fq, dropped_fq, n_thread);
+        merge(clean_fq, dropped_fq, tmp_dir, n_thread);
         cout << log_title() << "INFO -- Merge completed!" << endl;
 
         ptime end_time = second_clock::local_time();

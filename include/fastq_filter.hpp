@@ -10,10 +10,14 @@ namespace fastq_filter {
     void processor(std::vector<boost::filesystem::path>&,
             std::vector<boost::filesystem::path>&,
             std::vector<boost::filesystem::path>&,
+            boost::filesystem::path&,
             std::vector< std::unordered_set<std::string> >&,
             int*,
             float*,
             unsigned int*,
             int*);
-    void merge(std::vector<boost::filesystem::path>&, std::vector<boost::filesystem::path>&, int);
+    void merge(std::vector<boost::filesystem::path>&,
+            std::vector<boost::filesystem::path>&,
+            boost::filesystem::path&,
+            int);
 }
