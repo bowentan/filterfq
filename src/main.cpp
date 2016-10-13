@@ -52,7 +52,7 @@ int main(int argc, char* argv[]) {
         generic.add_options()
             ("help,h", "produce help message")
             ("thread,t", value<int>(&n_thread) -> default_value(8), "specify the number of threads to use")
-            ("tmpDir,T", value<path>(&tmp_dir) -> default_value(temp_directory_path()), "specify the directory to store temporary files")
+            ("tmpDir,T", value<path>(&tmp_dir), "specify the directory to store temporary files")
         ;
         
         options_description param("Input parameters & files", options_description::m_default_line_length * 2, options_description::m_default_line_length);
@@ -168,6 +168,10 @@ int main(int argc, char* argv[]) {
                     return 1;
                 }
             }
+        }
+
+        if (!vm.count("tmpDir")) {
+            tmp_dir = clean_fq[0].parent_path();
         }
 
         if (raw_fq.size() != clean_fq.size()) {
@@ -297,7 +301,6 @@ int main(int argc, char* argv[]) {
             cout << log_title() << "INFO -- All quality codes will be converted to the corresponding codes in "
                 << quality_sys[clean_quality_sys] << "." << endl;
         }
-
 
         unsigned int counter[6] = {0, 0, 0, 0, 0, 0};
         int param_int[3] = {min_base_quality, raw_quality_sys, clean_quality_sys};
