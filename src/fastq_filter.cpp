@@ -423,38 +423,70 @@ namespace fastq_filter {
         }
     }
 
+    void merge_single(boost::filesystem::path& outfile, boost::filesystem::path& tmp_dir, int n_thread) {
+        std::ofstream out(outfile.string(), std::ios_base::out | std::ios_base::binary | std::ios_base::app);
+        
+        for (int j = 0; j < n_thread; j++) {
+            std::string tmp_filename = (tmp_dir / outfile.filename()).string() + "." + std::to_string(j) + ".tmp";
+            std::ifstream tmp_file(tmp_filename, std::ios_base::in | std::ios_base::binary);
+
+            out << tmp_file.rdbuf();
+
+            tmp_file.close();
+
+            boost::filesystem::remove(tmp_filename);
+        }
+        
+        out.close();
+    }
+
     void merge(std::vector<boost::filesystem::path>& clean_outfiles,
             std::vector<boost::filesystem::path>& dropped_outfiles,
             boost::filesystem::path& tmp_dir,
             int n_thread) {
-        std::ofstream clean_out[clean_outfiles.size()];
-        std::ofstream dropped_out[dropped_outfiles.size()];
+        boost::thread t[clean_outfiles.size() * 2];
         for (int i = 0; i < clean_outfiles.size(); i++) {
-            clean_out[i].open(clean_outfiles[i].string(), std::ios_base::out | std::ios_base::binary | std::ios_base::app);
-            dropped_out[i].open(dropped_outfiles[i].string(), std::ios_base::out | std::ios_base::binary | std::ios_base::app);
+            t[2 * i] = boost::thread(merge_single, clean_outfiles[i], tmp_dir, n_thread);
+            t[2 * i + 1] = boost::thread(merge_single, dropped_outfiles[i], tmp_dir, n_thread);
         }
-        
-        for (int i = 0; i < clean_outfiles.size(); i++) {
-            for (int j = 0; j < n_thread; j++) {
-                std::string clean_filename = (tmp_dir / clean_outfiles[i].filename()).string() + "." + std::to_string(j) + ".tmp";
-                std::string dropped_filename = (tmp_dir / dropped_outfiles[i].filename()).string() + "." + std::to_string(j) + ".tmp";
-                std::ifstream clean_file(clean_filename, std::ios_base::in | std::ios_base::binary);
-                std::ifstream dropped_file(dropped_filename, std::ios_base::in | std::ios_base::binary);
 
-                clean_out[i] << clean_file.rdbuf();
-                dropped_out[i] << dropped_file.rdbuf();
-
-                clean_file.close();
-                dropped_file.close();
-
-                boost::filesystem::remove(clean_filename);
-                boost::filesystem::remove(dropped_filename);
-            }
-        }
-        
-        for (int i = 0; i < clean_outfiles.size(); i++) {
-            clean_out[i].close();
-            dropped_out[i].close();
+        for (int i = 0; i < clean_outfiles.size() * 2; i++) {
+            t[i].join();
         }
     }
+
+    // void merge(std::vector<boost::filesystem::path>& clean_outfiles,
+    //         std::vector<boost::filesystem::path>& dropped_outfiles,
+    //         boost::filesystem::path& tmp_dir,
+    //         int n_thread) {
+    //     std::ofstream clean_out[clean_outfiles.size()];
+    //     std::ofstream dropped_out[dropped_outfiles.size()];
+    //     for (int i = 0; i < clean_outfiles.size(); i++) {
+    //         clean_out[i].open(clean_outfiles[i].string(), std::ios_base::out | std::ios_base::binary | std::ios_base::app);
+    //         dropped_out[i].open(dropped_outfiles[i].string(), std::ios_base::out | std::ios_base::binary | std::ios_base::app);
+    //     }
+    //     
+    //     for (int i = 0; i < clean_outfiles.size(); i++) {
+    //         for (int j = 0; j < n_thread; j++) {
+    //             std::string clean_filename = (tmp_dir / clean_outfiles[i].filename()).string() + "." + std::to_string(j) + ".tmp";
+    //             std::string dropped_filename = (tmp_dir / dropped_outfiles[i].filename()).string() + "." + std::to_string(j) + ".tmp";
+    //             std::ifstream clean_file(clean_filename, std::ios_base::in | std::ios_base::binary);
+    //             std::ifstream dropped_file(dropped_filename, std::ios_base::in | std::ios_base::binary);
+
+    //             clean_out[i] << clean_file.rdbuf();
+    //             dropped_out[i] << dropped_file.rdbuf();
+
+    //             clean_file.close();
+    //             dropped_file.close();
+
+    //             boost::filesystem::remove(clean_filename);
+    //             boost::filesystem::remove(dropped_filename);
+    //         }
+    //     }
+    //     
+    //     for (int i = 0; i < clean_outfiles.size(); i++) {
+    //         clean_out[i].close();
+    //         dropped_out[i].close();
+    //     }
+    // }
 }
