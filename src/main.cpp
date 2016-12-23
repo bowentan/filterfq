@@ -1,3 +1,4 @@
+#include <boost/algorithm/string/join.hpp>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
@@ -12,8 +13,9 @@
 #include <iterator>
 #include <unordered_set>
 
-#define TESTING
+// #define TESTING
 
+using namespace boost::algorithm;
 using namespace boost::program_options;
 using namespace boost::iostreams;
 using namespace boost::filesystem;
@@ -29,9 +31,12 @@ int main(int argc, char* argv[]) {
         ptime start_time = second_clock::local_time();
         // input variables
         const string quality_sys[5] = {"Sanger", "Solexa", "Illumina 1.3+", "Illumina 1.5+", "Illumina 1.8+"};
+        const int THREAD_BLOCK_SIZE = 500000;
         bool does_check_quality_sys;
         bool prefer_specified_raw_quality_sys;
+        // bool verbose;
         int n_thread;
+        int max_read_len;
         int raw_quality_sys;
         int min_base_quality;
         float max_base_N_rate;
@@ -58,6 +63,8 @@ int main(int argc, char* argv[]) {
         options_description param("Input parameters & files", options_description::m_default_line_length * 2, options_description::m_default_line_length);
         param.add_options()
             ("checkQualitySystem,c", bool_switch(&does_check_quality_sys), "only check quality system of the fastq file")
+            // ("verbose,v", bool_switch(&verbose), "print filtering information")
+            ("maxReadLen,l", value<int>(&max_read_len) -> default_value(100), "maximum read length in the fastq file")
             ("baseNrate,N", value<float>(&max_base_N_rate) -> default_value(0.05), "maximum rate of \'N\' base allowed along a read")
             ("averageQuality,Q", value<float>(&min_ave_quality) -> default_value(0), "minimum average quality allowed along a read")
             ("perBaseQuality,q", value<int>(&min_base_quality) -> default_value(5), "minimum quality per base allowed along a read")
@@ -71,10 +78,10 @@ int main(int argc, char* argv[]) {
         options_description output("Output parameters & files", options_description::m_default_line_length * 2, options_description::m_default_line_length);
         output.add_options()
             ("cleanQualitySystem,S", value<int>(&clean_quality_sys) -> default_value(4), "specify quality system of cleaned fastq, the same as rawQualitySystem")
-            ("outDir,O", value<path>(&out_dir) -> default_value(current_path()), "specify output directory, not used if cleanFastq is specified")
-            ("outBasename,o", value<string>(&out_basename), "specify the basename for output file(s), required if outDir is specified")
-            ("cleanFastq,F", value< vector<path> >(&clean_fq) -> multitoken(), "cleaned fastq file name(s), not used if outDir or outBasename is specified")
-            ("droppedFastq,D", value< vector<path> >(&dropped_fq) -> multitoken(), "fastq file(s) containing reads that are filtered out")
+            ("outDir,O", value<path>(&out_dir) -> required(), "specify output directory, required")
+            ("outBasename,o", value<string>(&out_basename) -> required(), "specify the basename for output file(s), required")
+            // ("cleanFastq,F", value< vector<path> >(&clean_fq) -> multitoken(), "cleaned fastq file name(s), not used if outDir or outBasename is specified")
+            // ("droppedFastq,D", value< vector<path> >(&dropped_fq) -> multitoken(), "fastq file(s) containing reads that are filtered out")
         ;
         
         options_description desc("useage: filterfq <option>");
@@ -88,9 +95,9 @@ int main(int argc, char* argv[]) {
         }
         check_option_independency(3, vm, "cleanFastq", "droppedFastq", "outBasename");
         check_option_independency(3, vm, "cleanFastq", "droppedFastq", "outDir");
-        check_option_dependency(4, vm, "rawFastq", "checkQualitySystem", "cleanFastq", "droppedFastq", "outBasename");
-        check_option_dependency(1, vm, "cleanFastq", "droppedFastq");
-        check_option_dependency(1, vm, "droppedFastq", "cleanFastq");
+        // check_option_dependency(2, vm, "rawFastq", "checkQualitySystem", "outBasename");
+        // check_option_dependency(1, vm, "cleanFastq", "droppedFastq");
+        // check_option_dependency(1, vm, "droppedFastq", "cleanFastq");
         notify(vm);    
         
         for (vector<path>::iterator p = raw_fq.begin(); p != raw_fq.end(); p++) {
@@ -134,6 +141,7 @@ int main(int argc, char* argv[]) {
             time_duration dt = end_time - start_time;
             cout << log_title() << "INFO -- Process finished successfully! "
                 << dt.total_seconds() << " seconds elapsed. Thank you for using filterfq!" << endl;
+            delete checked_quality_sys;
             return 0;
         }
         
@@ -145,33 +153,34 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        if (vm.count("outBasename")) {
-            if (raw_fq.size() == 1) {
-                clean_fq.push_back(out_dir / path(out_basename + ".clean.fastq.gz"));
-                dropped_fq.push_back(out_dir / path(out_basename + ".dropped.fastq.gz"));
-            }
-            else if (raw_fq.size() == 2) {
-                for (int i = 0; i < raw_fq.size(); i++) {
-                    clean_fq.push_back(out_dir / path(out_basename + "_" + to_string(i + 1) + ".clean.fastq.gz"));
-                    dropped_fq.push_back(out_dir / path(out_basename + "_" + to_string(i + 1) + ".dropped.fastq.gz"));
-                }
+        // if (vm.count("outBasename")) {
+        if (raw_fq.size() == 1) {
+            clean_fq.push_back(out_dir / path(out_basename + ".clean.fastq.gz"));
+            dropped_fq.push_back(out_dir / path(out_basename + ".dropped.fastq.gz"));
+        }
+        else if (raw_fq.size() == 2) {
+            for (int i = 0; i < raw_fq.size(); i++) {
+                clean_fq.push_back(out_dir / path(out_basename + "_" + to_string(i + 1) + ".clean.fastq.gz"));
+                dropped_fq.push_back(out_dir / path(out_basename + "_" + to_string(i + 1) + ".dropped.fastq.gz"));
             }
         }
-        else {
-            for (int i = 0; i < clean_fq.size(); i++) {
-                try {
-                    clean_fq[i] = canonical(clean_fq[i].parent_path()) / clean_fq[i].filename();
-                    dropped_fq[i] = canonical(dropped_fq[i].parent_path()) / dropped_fq[i].filename();
-                }
-                catch (filesystem_error& e) {
-                    cerr << "error: No such file or directory: " << e.path1().string() << endl;
-                    return 1;
-                }
-            }
-        }
+        // }
+        // else {
+        //     for (int i = 0; i < clean_fq.size(); i++) {
+        //         try {
+        //             clean_fq[i] = canonical(clean_fq[i].parent_path()) / clean_fq[i].filename();
+        //             dropped_fq[i] = canonical(dropped_fq[i].parent_path()) / dropped_fq[i].filename();
+        //         }
+        //         catch (filesystem_error& e) {
+        //             cerr << "error: No such file or directory: " << e.path1().string() << endl;
+        //             return 1;
+        //         }
+        //     }
+        // }
 
         if (!vm.count("tmpDir")) {
-            tmp_dir = clean_fq[0].parent_path();
+            // tmp_dir = clean_fq[0].parent_path();
+            tmp_dir = out_dir;
         }
 
         if (raw_fq.size() != clean_fq.size()) {
@@ -213,7 +222,7 @@ int main(int argc, char* argv[]) {
         }
 
         cout << log_title() << "Welcome to filterfq!" << endl
-            << log_title() << "INFO -- Filtering parameters: ";
+            << log_title() << "INFO -- Arguments: ";
         for (variables_map::iterator i = vm.begin(); i != vm.end(); i++) {
             const variable_value& v = i -> second;
             // if (v.value().type() == typeid(string)) {
@@ -228,28 +237,20 @@ int main(int argc, char* argv[]) {
             else if (v.value().type() == typeid(bool)) {
                 cout << i -> first << "=" << boolalpha << v.as<bool>() << " ";
             }
-            // else if (!v.defaulted() && v.value().type() == typeid(path)) {
-            //     cout << "--" << i -> first << " " << out_dir.string() << " ";
-            // }
-            // else if (v.value().type() == typeid(vector<path>)) {
-            //     string op = i -> first;
-            //     cout << "--" << op << " ";
-            //     if (op == "rawFastq") {
-            //         for (path p : raw_fq) {
-            //             cout << p.string() << " ";
-            //         }
-            //     }
-            //     else if (op == "cleanFastq") {
-            //         for (path p : clean_fq) {
-            //             cout << p.string() << " ";
-            //         }
-            //     }
-            //     else if (op == "droppedFastq") {
-            //         for (path p : dropped_fq) {
-            //             cout << p.string() << " ";
-            //         }
-            //     }
-            // }
+            else if (v.value().type() == typeid(string)) {
+                cout << i -> first << "=" << v.as<string>() << " ";
+            }
+            else if (v.value().type() == typeid(path)) {
+                cout << i -> first << "=" << canonical(v.as<path>()).string() << " ";
+            }
+            else if (v.value().type() == typeid(vector<path>)) {
+                vector<path> vv = v.as< vector<path> >();
+                vector<string> ss;
+                for (vector<path>::const_iterator p = vv.begin(); p != vv.end(); p++){
+                    ss.push_back(canonical(*p).string());
+                }
+                cout << i -> first << "=" << join(ss, ",") << " ";
+            }
         }
         cout << endl;
 
@@ -275,6 +276,7 @@ int main(int argc, char* argv[]) {
         cout << endl;
 
         int* checked_quality_sys = check_quality_system(raw_fq[0]);
+        int read_len = checked_quality_sys[3];
         cout << log_title() << "INFO -- After checking 100,000 random reads, min quality code is \'" 
             << (char)checked_quality_sys[0] 
             << "\' and max quality code is \'" 
@@ -301,9 +303,54 @@ int main(int argc, char* argv[]) {
             cout << log_title() << "INFO -- All quality codes will be converted to the corresponding codes in "
                 << quality_sys[clean_quality_sys] << "." << endl;
         }
+        delete checked_quality_sys;
 
-        unsigned int counter[6] = {0, 0, 0, 0, 0, 0};
-        int param_int[3] = {min_base_quality, raw_quality_sys, clean_quality_sys};
+
+        cout << log_title() << "INFO -- Start filtering..." << endl;
+        // if (verbose) {
+        //     cout << log_title() << "INFO " 
+        //         << setw(12) << "Processed" << " | "
+        //         << setw(12) << "Filtered" << " | "
+        //         << setw(12) << "Ratio(%)" << " | "
+        //         << setw(12) << "High" << " | "
+        //         //     << setw(12) << "Ratio(%)" << " | "
+        //         //     << setw(12) << "Ratio(%)" << " | "
+        //         << setw(12) << "Low average" << " | "
+        //         //     << setw(12) << "Ratio(%)" << " | "
+        //         //     << setw(12) << "Ratio(%)" << " | "
+        //         << setw(12) << "High low-" << " | "
+        //         //     << setw(12) << "Ratio(%)" << " | "
+        //         //     << setw(12) << "Ratio(%)" << " | " 
+        //         << setw(12) << "With" << " | " 
+        //         //     << setw(12) << "Ratio(%)" << " | "
+        //         //     << setw(12) << "Ratio(%)" << " | " 
+        //         << endl;
+        //     cout << log_title() << "INFO "
+        //         << setw(12) << "reads" << " | "
+        //         << setw(12) << "reads" << " | "
+        //         << setw(12) << "filtered" << " | "
+        //         << setw(12) << "N-rate" << " | "
+        //         //     << setw(12) << "in processed" << " | "
+        //         //     << setw(12) << "in filtered" << " | "
+        //         << setw(12) << "quality" << " | "
+        //         //     << setw(12) << "in processed" << " | "
+        //         //     << setw(12) << "in filtered" << " | "
+        //         << setw(12) << "quality-rate" << " | "
+        //         //     << setw(12) << "in processed" << " | "
+        //         //     << setw(12) << "in filtered" << " | "
+        //         << setw(12) << "adapter" << " | "
+        //         //     << setw(12) << "in processed" << " | "
+        //         //     << setw(12) << "in filtered" << " | "
+        //         << endl;
+        //     cout << log_title() << "INFO ";
+        //     for (int i = 0; i < 15 * 7; i++) {
+        //         cout << "-";
+        //     }
+        //     cout << endl;
+        // }
+
+        statistic counter(raw_fq.size(), max_read_len);
+        int param_int[4] = {min_base_quality, raw_quality_sys, clean_quality_sys, max_read_len};
         float param_float[3] = {max_base_N_rate, min_ave_quality, max_low_quality_rate};
         boost::thread t[n_thread];
         int thread_info[n_thread][3];
@@ -314,49 +361,8 @@ int main(int argc, char* argv[]) {
                 adapter_read_id_lists.push_back(load_adapter(*p));
         }
 
-        cout << log_title() << "INFO -- Start filtering..." << endl;
-        cout << log_title() << "INFO " 
-            << setw(12) << "Processed" << " | "
-            << setw(12) << "Filtered" << " | "
-            << setw(12) << "Ratio(%)" << " | "
-            << setw(12) << "High" << " | "
-            //     << setw(12) << "Ratio(%)" << " | "
-            //     << setw(12) << "Ratio(%)" << " | "
-            << setw(12) << "Low average" << " | "
-            //     << setw(12) << "Ratio(%)" << " | "
-            //     << setw(12) << "Ratio(%)" << " | "
-            << setw(12) << "High low-" << " | "
-            //     << setw(12) << "Ratio(%)" << " | "
-            //     << setw(12) << "Ratio(%)" << " | " 
-            << setw(12) << "With" << " | " 
-            //     << setw(12) << "Ratio(%)" << " | "
-            //     << setw(12) << "Ratio(%)" << " | " 
-            << endl;
-        cout << log_title() << "INFO "
-            << setw(12) << "reads" << " | "
-            << setw(12) << "reads" << " | "
-            << setw(12) << "filtered" << " | "
-            << setw(12) << "N-rate" << " | "
-            //     << setw(12) << "in processed" << " | "
-            //     << setw(12) << "in filtered" << " | "
-            << setw(12) << "quality" << " | "
-            //     << setw(12) << "in processed" << " | "
-            //     << setw(12) << "in filtered" << " | "
-            << setw(12) << "quality-rate" << " | "
-            //     << setw(12) << "in processed" << " | "
-            //     << setw(12) << "in filtered" << " | "
-            << setw(12) << "adapter" << " | "
-            //     << setw(12) << "in processed" << " | "
-            //     << setw(12) << "in filtered" << " | "
-            << endl;
-        cout << log_title() << "INFO ";
-        for (int i = 0; i < 15 * 7; i++) {
-            cout << "-";
-        }
-        cout << endl;
-
         for (int i = 0; i < n_thread; ++i) {
-            thread_info[i][0] = 500000;
+            thread_info[i][0] = THREAD_BLOCK_SIZE;
             thread_info[i][1] = n_thread;
             thread_info[i][2] = i;
             t[i] = boost::thread(processor, 
@@ -367,29 +373,86 @@ int main(int argc, char* argv[]) {
                     adapter_read_id_lists, 
                     param_int, 
                     param_float, 
-                    counter, 
+                    &counter, 
                     thread_info[i]);
         }
 
         for (int i = 0; i < n_thread; ++i)
             t[i].join();
 
-        cout << log_title() << "INFO ";
-        for (int i = 0; i < 15 * 7; i++) {
-            cout << "-";
+#ifdef TESTING
+        cout << "n_filtered: " << counter.n_filtered << endl;
+        cout << "n_total: " << counter.n_total << endl;
+        for (int i = 0; i < counter.read_len_info.size(); i++) {
+            cout << "Read len - " << i << endl;
+            for (int j = 0; j < counter.read_len_info[i].size(); j++) {
+                cout << counter.read_len_info[i][j] << " ";
+            }
+            cout << endl;
+            
+            cout << "Filtered info - " << i << endl;
+            for (int j = 0; j < counter.filtered_read_info[i].size(); j++) {
+                cout << counter.filtered_read_info[i][j] << " ";
+            }
+            cout << endl;
+            
+            cout << "Base info - " << i << endl;
+            int sum_base[10] = {0};
+            for (int j = 0; j < counter.base_info[i].size(); j++) {
+                for (int k = 0; k < counter.base_info[i][j].size(); k++) {
+                    sum_base[k] += counter.base_info[i][j][k]; 
+                    cout << counter.base_info[i][j][k] << " ";
+                }
+                cout << endl;
+            }
+            for (int j = 0; j < 10; j++) {
+                cout << sum_base[j] << " ";
+            }
+            cout << endl;
+
+            int sum_q[42] = {0};
+            cout << "Base quality info - " << 2 * i << endl;
+            for (int j = 0; j < counter.base_quality_info[2 * i].size(); j++) {
+                for (int k = 0; k < counter.base_quality_info[2 * i][j].size(); k++) {
+                    sum_q[k] += counter.base_quality_info[2 * i][j][k];
+                    cout << counter.base_quality_info[2 * i][j][k] << " ";
+                }
+                cout << endl;
+            }
+            for (int j = 0; j < 42; j++) {
+                cout << sum_q[j] << " ";
+            }
+            cout << endl;
+            cout << "Base quality info - " << 2 * i + 1 << endl;
+            for (int j = 0; j < counter.base_quality_info[2 * i + 1].size(); j++) {
+                for (int k = 0; k < counter.base_quality_info[2 * i + 1][j].size(); k++) {
+                    cout << counter.base_quality_info[2 * i + 1][j][k] << " ";
+                }
+                cout << endl;
+            }
         }
 
-        cout << endl;
-        cout << log_title() << "INFO " 
-            << fixed
-            << setw(12) << setprecision(6) << counter[0] << " | "
-            << setw(12) << setprecision(6) << counter[1] << " | "
-            << setw(12) << setprecision(6) << counter[1] * 100.0 / counter[0] << " | "
-            << setw(12) << setprecision(6) << counter[2] << " | "
-            << setw(12) << setprecision(6) << counter[3] << " | "
-            << setw(12) << setprecision(6) << counter[4] << " | "
-            << setw(12) << setprecision(6) << counter[5] << " | "
-            << endl;
+#endif
+        write_statistic(counter, out_dir);
+
+        // if (verbose) {
+        //     cout << log_title() << "INFO ";
+        //     for (int i = 0; i < 15 * 7; i++) {
+        //         cout << "-";
+        //     }
+
+        //     cout << endl;
+        //     cout << log_title() << "INFO " 
+        //         << fixed
+        //         << setw(12) << setprecision(6) << counter[0] << " | "
+        //         << setw(12) << setprecision(6) << counter[1] << " | "
+        //         << setw(12) << setprecision(6) << counter[1] * 100.0 / counter[0] << " | "
+        //         << setw(12) << setprecision(6) << counter[2] << " | "
+        //         << setw(12) << setprecision(6) << counter[3] << " | "
+        //         << setw(12) << setprecision(6) << counter[4] << " | "
+        //         << setw(12) << setprecision(6) << counter[5] << " | "
+        //         << endl;
+        // }
 
         cout << log_title() << "INFO -- Merging tmp files..." << endl;
         merge(clean_fq, dropped_fq, tmp_dir, n_thread);

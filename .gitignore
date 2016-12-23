@@ -1,3 +1,12 @@
 bin/*
-build
 test
+autom4te.cache
+Makefile
+Makefile.in
+aclocal.md4
+config.log
+config.status
+configure
+depcomp
+install-sh
+missing
