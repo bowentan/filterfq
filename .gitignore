@@ -1,4 +1,8 @@
 bin/*
+src/*.o
+src/Makefile
+src/Makefile.in
+src/filterfq
 test
 autom4te.cache
 Makefile
