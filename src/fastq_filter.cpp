@@ -876,7 +876,7 @@ namespace fastq_filter {
             }
             raw_base_quality_info_file << std::endl;
             raw_base_quality_info_file << "Percent_%";
-            unsigned long sum_by_quality_total = std::accumulate(sum_by_quality.begin(), sum_by_quality.end(), 0);
+            unsigned long sum_by_quality_total = std::accumulate(sum_by_quality.begin(), sum_by_quality.end(), 0UL);
             for (int j = 0; j < sum_by_quality.size(); j++) {
                 raw_base_quality_info_file << std::fixed << std::setprecision(2) << '\t' << sum_by_quality[j] * 100.0 / sum_by_quality_total;
             }
@@ -957,7 +957,7 @@ namespace fastq_filter {
             }
             clean_base_quality_info_file << std::endl;
             clean_base_quality_info_file << "Percent_%";
-            sum_by_quality_total = std::accumulate(sum_by_quality.begin(), sum_by_quality.end(), 0);
+            sum_by_quality_total = std::accumulate(sum_by_quality.begin(), sum_by_quality.end(), 0UL);
             for (int j = 0; j < sum_by_quality.size(); j++) {
                 clean_base_quality_info_file << std::fixed << std::setprecision(2) << '\t' << sum_by_quality[j] * 100.0 / sum_by_quality_total;
             }
