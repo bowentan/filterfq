@@ -43,7 +43,7 @@ namespace fastq_filter {
     std::string log_title() {return "[filterfq | " + to_simple_string(boost::posix_time::second_clock::local_time()) + "] ";}
 
     int* check_quality_system(const boost::filesystem::path& filepath) {
-        int* results = new int[3];
+        int* results = new int[4];
         std::ifstream infile (filepath.string(), std::ios_base::in | std::ios_base::binary);
         boost::iostreams::filtering_istream decompressor;
         decompressor.push(boost::iostreams::gzip_decompressor());
@@ -52,15 +52,15 @@ namespace fastq_filter {
 
         unsigned char min = '~';
         unsigned char max = '!';
-        int n_read = 1;
+        int n_read = 0;
         std::pair<std::string::iterator, std::string::iterator> extremum;
-        boost::random::mt19937 gen;
-        boost::random::uniform_int_distribution<> dist(1, 10);
-        while (n_read <= 100000 && getline(decompressor, line)) {
+        // boost::random::mt19937 gen;
+        // boost::random::uniform_int_distribution<> dist(1, 10);
+        while (n_read <= 4000000 && getline(decompressor, line)) {
             for (int i = 0; i < 3; i++)
                 getline(decompressor, line);
-            if (dist(gen) >= 5) 
-                continue;
+            // if (dist(gen) >= 5) 
+            //     continue;
 
             extremum = boost::minmax_element(line.begin(), line.end());
             if (*extremum.second >= max) {
@@ -98,6 +98,7 @@ namespace fastq_filter {
                 results[2] = 3;
             }
         }
+        results[3] = n_read;
         return results;
     }
     
@@ -635,6 +636,7 @@ namespace fastq_filter {
     }
 
     void merge_single(boost::filesystem::path& outfile, boost::filesystem::path& tmp_dir, int n_thread) {
+        boost::filesystem::remove(outfile);
         std::ofstream out(outfile.string(), std::ios_base::out | std::ios_base::binary | std::ios_base::app);
         
         for (int j = 0; j < n_thread; j++) {

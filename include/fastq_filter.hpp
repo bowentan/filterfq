@@ -1,3 +1,4 @@
+#include <boost/filesystem.hpp>
 #include <unordered_set>
 
 namespace fastq_filter {

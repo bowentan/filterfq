@@ -2,8 +2,9 @@
 #include <cstdarg>
 
 namespace command_options {
+    // up to 2
     void check_option_dependency(int n, const boost::program_options::variables_map& vm, const char* for_what, ...) {
-        if (!vm.count("help")) {
+        if (!vm.count("help") && !vm["checkQualitySystem"].as<bool>()) {
             if (vm.count(for_what) && !vm[for_what].defaulted()) {
                 std::vector<const char*> required_options;
                 va_list vl;
