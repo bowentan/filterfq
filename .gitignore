@@ -1,3 +1,4 @@
+dist/*
 bin/*
 src/*.o
 src/Makefile
@@ -13,4 +14,3 @@ configure
 depcomp
 install-sh
 missing
-filterfq-*

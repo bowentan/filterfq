@@ -78,8 +78,8 @@ int main(int argc, char* argv[]) {
         options_description output("Output parameters & files", options_description::m_default_line_length * 2, options_description::m_default_line_length);
         output.add_options()
             ("cleanQualitySystem,S", value<int>(&clean_quality_sys) -> default_value(4), "specify quality system of cleaned fastq, the same as rawQualitySystem")
-            ("outDir,O", value<path>(&out_dir) -> required(), "specify output directory, required")
-            ("outBasename,o", value<string>(&out_basename) -> required(), "specify the basename for output file(s), required")
+            ("outDir,O", value<path>(&out_dir), "specify output directory")
+            ("outBasename,o", value<string>(&out_basename), "specify the basename for output file(s)")
             // ("cleanFastq,F", value< vector<path> >(&clean_fq) -> multitoken(), "cleaned fastq file name(s), not used if outDir or outBasename is specified")
             // ("droppedFastq,D", value< vector<path> >(&dropped_fq) -> multitoken(), "fastq file(s) containing reads that are filtered out")
         ;
@@ -93,11 +93,14 @@ int main(int argc, char* argv[]) {
             cout << setprecision(2) << desc << "\n";
             return 0;
         }
-        check_option_independency(3, vm, "cleanFastq", "droppedFastq", "outBasename");
-        check_option_independency(3, vm, "cleanFastq", "droppedFastq", "outDir");
+        // check_option_independency(3, vm, "cleanFastq", "droppedFastq", "outBasename");
+        // check_option_independency(3, vm, "cleanFastq", "droppedFastq", "outDir");
         // check_option_dependency(2, vm, "rawFastq", "checkQualitySystem", "outBasename");
         // check_option_dependency(1, vm, "cleanFastq", "droppedFastq");
         // check_option_dependency(1, vm, "droppedFastq", "cleanFastq");
+        check_option_dependency(2, vm, "rawFastq", "outBasename", "outDir");
+        check_option_dependency(1, vm, "outBasename", "outDir");
+        check_option_dependency(1, vm, "outDir", "outBasename");
         notify(vm);    
         
         for (vector<path>::iterator p = raw_fq.begin(); p != raw_fq.end(); p++) {
@@ -130,7 +133,7 @@ int main(int argc, char* argv[]) {
             }
             cout << endl;
             int* checked_quality_sys = check_quality_system(raw_fq[0]);
-            cout << log_title() << "INFO -- After checking 100,000 random reads, min quality code is \'" 
+            cout << log_title() << "INFO -- After checking " << ((checked_quality_sys[3] < 4000000) ? checked_quality_sys[3] : 4000000) << " reads, min quality code is \'" 
                 << (char)checked_quality_sys[0] 
                 << "\' and max quality code is \'" 
                 << (char)checked_quality_sys[1] 
@@ -277,7 +280,7 @@ int main(int argc, char* argv[]) {
 
         int* checked_quality_sys = check_quality_system(raw_fq[0]);
         int read_len = checked_quality_sys[3];
-        cout << log_title() << "INFO -- After checking 100,000 random reads, min quality code is \'" 
+        cout << log_title() << "INFO -- After checking " << ((checked_quality_sys[3] < 4000000) ? checked_quality_sys[3] : 4000000) << " reads, min quality code is \'" 
             << (char)checked_quality_sys[0] 
             << "\' and max quality code is \'" 
             << (char)checked_quality_sys[1] 
@@ -303,10 +306,21 @@ int main(int argc, char* argv[]) {
             cout << log_title() << "INFO -- All quality codes will be converted to the corresponding codes in "
                 << quality_sys[clean_quality_sys] << "." << endl;
         }
+        if (n_thread > 8) {
+            cout << log_title() << "WARN -- The given number of threads exceeds the maximum (8), changed it to 8." << endl;
+            n_thread = 8;
+        }
+        if (checked_quality_sys[3] < THREAD_BLOCK_SIZE * n_thread) {
+            cout << log_title() << "WARN -- " << n_thread << " threads are redundant for filtering the given fastq(s), it is automatically adjusted to ";
+            n_thread = (checked_quality_sys[3] / THREAD_BLOCK_SIZE == 0) ? checked_quality_sys[3] / THREAD_BLOCK_SIZE + 1 : checked_quality_sys[3] / THREAD_BLOCK_SIZE;
+            cout << n_thread << " threads in accordance with the given fastq(s)." << endl;
+        }
         delete checked_quality_sys;
 
-
         cout << log_title() << "INFO -- Start filtering..." << endl;
+#ifdef TESTING
+        return 0;
+#endif
         // if (verbose) {
         //     cout << log_title() << "INFO " 
         //         << setw(12) << "Processed" << " | "
