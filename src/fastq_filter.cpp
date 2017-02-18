@@ -43,7 +43,7 @@ namespace fastq_filter {
     std::string log_title() {return "[filterfq | " + to_simple_string(boost::posix_time::second_clock::local_time()) + "] ";}
 
     int* check_quality_system(const boost::filesystem::path& filepath) {
-        int* results = new int[4];
+        int* results = new int[5];
         std::ifstream infile (filepath.string(), std::ios_base::in | std::ios_base::binary);
         boost::iostreams::filtering_istream decompressor;
         decompressor.push(boost::iostreams::gzip_decompressor());
@@ -53,6 +53,7 @@ namespace fastq_filter {
         unsigned char min = '~';
         unsigned char max = '!';
         int n_read = 0;
+        int max_len = 0;
         std::pair<std::string::iterator, std::string::iterator> extremum;
         // boost::random::mt19937 gen;
         // boost::random::uniform_int_distribution<> dist(1, 10);
@@ -61,6 +62,10 @@ namespace fastq_filter {
                 getline(decompressor, line);
             // if (dist(gen) >= 5) 
             //     continue;
+
+            if (line.length() > max_len) {
+                max_len = line.length();
+            }
 
             extremum = boost::minmax_element(line.begin(), line.end());
             if (*extremum.second >= max) {
@@ -99,6 +104,7 @@ namespace fastq_filter {
             }
         }
         results[3] = n_read;
+        results[4] = max_len;
         return results;
     }
     
@@ -242,6 +248,11 @@ namespace fastq_filter {
                 getline(infq_decompressor, plus_line);
                 getline(infq_decompressor, quality_line);
 
+                if (read_line.length() > max_read_len) {
+                    std::cout << log_title() << "ERROR -- There are reads whose length (" << read_line.length() << ") exceeds the maximum read length (" << max_read_len << ") so that segmentation fault may occur. Please set the argument of the parameter \'-maxReadLen/-l\' as one integer larger than or equal to " << read_line.length() << "." << std::endl;
+                    exit(1);
+                }
+
                 base_info = get_base_info(read_line);
                 base_quality_info = get_base_quality_info(quality_line, raw_quality_sys);
                 is_filtered = false;
@@ -320,6 +331,9 @@ namespace fastq_filter {
                     delete [] clean_base_quality_info;
                 }
                 else {
+                    if (raw_quality_sys != clean_quality_sys) {
+                        quality_system::quality_system_convert(quality_line, raw_quality_sys, clean_quality_sys);
+                    }
                     dropped_outfq_compressor << read_id_line << std::endl
                         << read_line << std::endl
                         << plus_line << std::endl
@@ -420,6 +434,11 @@ namespace fastq_filter {
                 getline(infq2_decompressor, plus_line2);
                 getline(infq1_decompressor, quality_line1);
                 getline(infq2_decompressor, quality_line2);
+
+                if (read_line1.length() > max_read_len || read_line2.length() > max_read_len) {
+                    std::cout << log_title() << "ERROR -- There are reads whose length (" << std::max(read_line1.length(), read_line2.length()) << ") exceeds the maximum read length (" << max_read_len << ") so that segmentation fault may occur. Please set the argument of the parameter \'-maxReadLen/-l\' as one integer larger than or equal to " << std::max(read_line1.length(), read_line2.length()) << "." << std::endl;
+                    exit(1);
+                }
 
                 base_info1 = get_base_info(read_line1);
                 base_info2 = get_base_info(read_line2);
@@ -579,6 +598,10 @@ namespace fastq_filter {
                     delete [] clean_base_quality_info2;
                 }
                 else {
+                    if (raw_quality_sys != clean_quality_sys) {
+                        quality_system::quality_system_convert(quality_line1, raw_quality_sys, clean_quality_sys);
+                        quality_system::quality_system_convert(quality_line2, raw_quality_sys, clean_quality_sys);
+                    }
                     dropped_outfq1_compressor << read_id_line1 << std::endl
                         << read_line1 << std::endl
                         << plus_line1 << std::endl
