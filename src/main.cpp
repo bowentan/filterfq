@@ -139,6 +139,9 @@ int main(int argc, char* argv[]) {
                 << (char)checked_quality_sys[1] 
                 << "\', the quality system is probably " 
                 << quality_sys[checked_quality_sys[2]] 
+                << ". " 
+                << "The maximum length of scanned reads is " 
+                << checked_quality_sys[4] 
                 << "." << endl;
             ptime end_time = second_clock::local_time();
             time_duration dt = end_time - start_time;
@@ -286,6 +289,9 @@ int main(int argc, char* argv[]) {
             << (char)checked_quality_sys[1] 
             << "\', the quality system is probably " 
             << quality_sys[checked_quality_sys[2]] 
+            << ". " 
+            << "The maximum length of scanned reads is " 
+            << checked_quality_sys[4] 
             << "." << endl;
         if (prefer_specified_raw_quality_sys) {
             cout << log_title() << "WARN -- User prefered specified quality system "
@@ -306,10 +312,17 @@ int main(int argc, char* argv[]) {
             cout << log_title() << "INFO -- All quality codes will be converted to the corresponding codes in "
                 << quality_sys[clean_quality_sys] << "." << endl;
         }
+
+        if (checked_quality_sys[4] > max_read_len) {
+            max_read_len = checked_quality_sys[4];
+            cout << log_title() << "WARN -- The maximum read length exceeds the given maximum read length (100), change it to " << max_read_len << "." << endl;
+        }
+
         if (n_thread > 8) {
             cout << log_title() << "WARN -- The given number of threads exceeds the maximum (8), changed it to 8." << endl;
             n_thread = 8;
         }
+
         if (checked_quality_sys[3] < THREAD_BLOCK_SIZE * n_thread) {
             cout << log_title() << "WARN -- " << n_thread << " threads are redundant for filtering the given fastq(s), it is automatically adjusted to ";
             n_thread = (checked_quality_sys[3] / THREAD_BLOCK_SIZE == 0) ? checked_quality_sys[3] / THREAD_BLOCK_SIZE + 1 : checked_quality_sys[3] / THREAD_BLOCK_SIZE;
@@ -375,7 +388,7 @@ int main(int argc, char* argv[]) {
                 adapter_read_id_lists.push_back(load_adapter(*p));
         }
 
-        for (int i = 0; i < n_thread; ++i) {
+        for (int i = 0; i < n_thread; i++) {
             thread_info[i][0] = THREAD_BLOCK_SIZE;
             thread_info[i][1] = n_thread;
             thread_info[i][2] = i;
@@ -391,7 +404,7 @@ int main(int argc, char* argv[]) {
                     thread_info[i]);
         }
 
-        for (int i = 0; i < n_thread; ++i)
+        for (int i = 0; i < n_thread; i++)
             t[i].join();
 
 #ifdef TESTING
