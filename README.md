@@ -2,11 +2,11 @@
 
 The program for cleaning/filtereing raw fastq files, providing the following functionalities.
 
-⋅⋅⋅⋅1. Automatically check quality system used in the raw fastq file(s)
-⋅⋅⋅⋅2. Filter out reads that have a number of 'N' bases, low average quality or a number of low quality base
-⋅⋅⋅⋅3. Convert quality system to specified system
-⋅⋅⋅⋅4. Output statistical information of the raw and clean fastq reads, including distribution of read length, base, base quality
-⋅⋅⋅⋅5. Multithread supported (up to 8)
+* 1. Automatically check quality system used in the raw fastq file(s)
+* 2. Filter out reads that have a number of 'N' bases, low average quality or a number of low quality base
+* 3. Convert quality system to specified system
+* 4. Output statistical information of the raw and clean fastq reads, including distribution of read length, base, base quality
+* 5. Multithread supported (up to 8)
 
 ## Getting Started
 
