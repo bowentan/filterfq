@@ -361,7 +361,8 @@ namespace fastq_filter {
             (*stat).n_clean += local_counter.n_clean;
             for (int i = 0; i < infiles.size(); i++) {
                 for (int j = 0; j < (*stat).read_len_info[i].size(); j++) {
-                    (*stat).read_len_info[i][j] += local_counter.read_len_info[i][j];
+                    (*stat).read_len_info[2 * i][j] += local_counter.read_len_info[2 * i][j];
+                    (*stat).read_len_info[2 * i + 1][j] += local_counter.read_len_info[2 * i + 1][j];
                 }
                 for (int j = 0; j < (*stat).filtered_read_info[i].size(); j++) {
                     (*stat).filtered_read_info[i][j] += local_counter.filtered_read_info[i][j];
