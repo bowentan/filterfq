@@ -2,8 +2,8 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.69])
-AC_INIT(filterfq, 1.1.1, notebowentan@gmail.com)
-AM_INIT_AUTOMAKE(filterfq, 1.1.1)
+AC_INIT(filterfq, 1.1.2, notebowentan@gmail.com)
+AM_INIT_AUTOMAKE(filterfq, 1.1.2)
 AC_CONFIG_HEADERS([config.h])
 
 # Checks for programs.
