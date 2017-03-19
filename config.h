@@ -126,6 +126,9 @@
 /* Define to 1 if you have the `sqrt' function. */
 /* #undef HAVE_SQRT */
 
+/* Define to 1 if stdbool.h conforms to C99. */
+#define HAVE_STDBOOL_H 1
+
 /* Define to 1 if you have the <stddef.h> header file. */
 #define HAVE_STDDEF_H 1
 
@@ -218,7 +221,7 @@
 #define PACKAGE_NAME "filterfq"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "filterfq 1.1.1"
+#define PACKAGE_STRING "filterfq 1.1.2"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "filterfq"
@@ -227,7 +230,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.1.1"
+#define PACKAGE_VERSION "1.1.2"
 
 /* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1
@@ -236,7 +239,7 @@
 #define TIME_WITH_SYS_TIME 1
 
 /* Version number of package */
-#define VERSION "1.1.1"
+#define VERSION "1.1.2"
 
 /* Define for Solaris 2.5.1 so the uint32_t typedef from <sys/synch.h>,
    <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the

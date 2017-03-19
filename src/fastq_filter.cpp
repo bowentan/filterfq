@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <numeric>
 #include <unordered_set>
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
@@ -8,9 +9,6 @@
 #include <boost/algorithm/minmax_element.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int_distribution.hpp>
-#include <boost/accumulators/accumulators.hpp>
-#include <boost/accumulators/statistics/stats.hpp>
-#include <boost/accumulators/statistics/mean.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/thread.hpp>
@@ -117,12 +115,6 @@ namespace fastq_filter {
             sum += *s;
         }
         return sum * 1.0 / quality_seq.size() - (quality_system::zero_quality)[sys];
-        // corresponding quality min
-        // boost::accumulators::accumulator_set<int, boost::accumulators::stats<boost::accumulators::tag::mean> > acc;
-        // for(char q : quality_seq) {
-        //     acc(q);
-        // }
-        // return boost::accumulators::mean(acc) - (quality_system::zero_quality)[sys];
     }
 
     float get_low_quality_rate(const std::string& quality_seq, const int sys, const int base_quality_threshold) {
