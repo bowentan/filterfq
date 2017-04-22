@@ -40,7 +40,7 @@ namespace fastq_filter {
 
     std::string log_title() {return "[filterfq | " + to_simple_string(boost::posix_time::second_clock::local_time()) + "] ";}
 
-    int* check_quality_system(const boost::filesystem::path& filepath) {
+    int* get_read_info(const boost::filesystem::path& filepath) {
         int* results = new int[5];
         std::ifstream infile (filepath.string(), std::ios_base::in | std::ios_base::binary);
         boost::iostreams::filtering_istream decompressor;

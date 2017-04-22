@@ -5,13 +5,16 @@
 #include <boost/iostreams/filter/gzip.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/thread.hpp>
-#include <command_options.hpp>
-#include <fastq_filter.hpp>
-#include <quality_system.hpp>
 #include <iostream>
 #include <fstream>
 #include <iterator>
 #include <unordered_set>
+#include <sstream>
+
+#include <command_options.hpp>
+#include <fastq_filter.hpp>
+#include <quality_system.hpp>
+#include <version.hpp>
 
 // #define TESTING
 
@@ -32,7 +35,7 @@ int main(int argc, char* argv[]) {
         // input variables
         const string quality_sys[5] = {"Sanger", "Solexa", "Illumina 1.3+", "Illumina 1.5+", "Illumina 1.8+"};
         const int THREAD_BLOCK_SIZE = 500000;
-        bool does_check_quality_sys;
+        bool only_get_read_info;
         bool prefer_specified_raw_quality_sys;
         // bool verbose;
         int n_thread;
@@ -56,13 +59,14 @@ int main(int argc, char* argv[]) {
         options_description generic("Gerneric options");
         generic.add_options()
             ("help,h", "produce help message")
+            ("version,v", "print current version")
             ("thread,t", value<int>(&n_thread) -> default_value(8), "specify the number of threads to use, maximum 8")
             ("tmpDir,T", value<path>(&tmp_dir), "specify the directory to store temporary files, default as the same as \'outDir\'")
         ;
         
         options_description param("Input parameters & files", options_description::m_default_line_length * 2, options_description::m_default_line_length);
         param.add_options()
-            ("checkQualitySystem,c", bool_switch(&does_check_quality_sys), "only check quality system of the fastq file")
+            ("checkQualitySystem,c", bool_switch(&only_get_read_info), "only check quality system of the fastq file")
             // ("verbose,v", bool_switch(&verbose), "print filtering information")
             ("maxReadLen,l", value<int>(&max_read_len) -> default_value(100), "maximum read length in the fastq file")
             ("baseNrate,N", value<float>(&max_base_N_rate) -> default_value(0.05), "maximum rate of \'N\' base allowed along a read")
@@ -84,20 +88,25 @@ int main(int argc, char* argv[]) {
             // ("droppedFastq,D", value< vector<path> >(&dropped_fq) -> multitoken(), "fastq file(s) containing reads that are filtered out")
         ;
         
-        options_description desc("useage: filterfq <option>");
+        stringstream usage;
+        usage << "usage: VERSION " << VERSION << endl
+            << "filterfq [-c] -f <fastq_1> [<fastq_2>] [OPTIONS]";
+        options_description desc(usage.str());
         desc.add(generic).add(param).add(output);
 
         variables_map vm; 
         store(command_line_parser(argc, argv).options(desc).run(), vm);
-        if (vm.count("help")) {
-            cout << setprecision(2) << desc << "\n";
+        if (vm.count("help") || argc == 1) {
+            cout << setprecision(2) << desc << endl;
+            cout << endl << "Enquiry or bug report: Bowen Tan via Email (notebowentan@gmail.com) or GitHub (https://github.com/bowentan/filterfq)." << endl;
             return 0;
         }
-        // check_option_independency(3, vm, "cleanFastq", "droppedFastq", "outBasename");
-        // check_option_independency(3, vm, "cleanFastq", "droppedFastq", "outDir");
-        // check_option_dependency(2, vm, "rawFastq", "checkQualitySystem", "outBasename");
-        // check_option_dependency(1, vm, "cleanFastq", "droppedFastq");
-        // check_option_dependency(1, vm, "droppedFastq", "cleanFastq");
+        else if (vm.count("version")) {
+            stringstream version;
+            version << "Current version: " << VERSION;
+            cout << version.str() << endl;
+            return 0;
+        }
         check_option_dependency(2, vm, "rawFastq", "outBasename", "outDir");
         check_option_dependency(1, vm, "outBasename", "outDir");
         check_option_dependency(1, vm, "outDir", "outBasename");
@@ -113,7 +122,7 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        if (does_check_quality_sys) {
+        if (only_get_read_info) {
             cout << log_title() << "Welcome to filterfq!" << endl
                 << log_title() << "INFO -- Parameters: filterfq ";
             for (variables_map::iterator i = vm.begin(); i != vm.end(); i++) {
@@ -132,22 +141,22 @@ int main(int argc, char* argv[]) {
                 }
             }
             cout << endl;
-            int* checked_quality_sys = check_quality_system(raw_fq[0]);
-            cout << log_title() << "INFO -- After checking " << ((checked_quality_sys[3] < 4000000) ? checked_quality_sys[3] : 4000000) << " reads, min quality code is \'" 
-                << (char)checked_quality_sys[0] 
+            int* read_info = get_read_info(raw_fq[0]);
+            cout << log_title() << "INFO -- After checking " << ((read_info[3] < 4000000) ? read_info[3] : 4000000) << " reads, min quality code is \'" 
+                << (char)read_info[0] 
                 << "\' and max quality code is \'" 
-                << (char)checked_quality_sys[1] 
+                << (char)read_info[1] 
                 << "\', the quality system is probably " 
-                << quality_sys[checked_quality_sys[2]] 
+                << quality_sys[read_info[2]] 
                 << ". " 
                 << "The maximum length of scanned reads is " 
-                << checked_quality_sys[4] 
+                << read_info[4] 
                 << "." << endl;
             ptime end_time = second_clock::local_time();
             time_duration dt = end_time - start_time;
             cout << log_title() << "INFO -- Process finished successfully! "
                 << dt.total_seconds() << " seconds elapsed. Thank you for using filterfq!" << endl;
-            delete checked_quality_sys;
+            delete read_info;
             return 0;
         }
         
@@ -281,17 +290,17 @@ int main(int argc, char* argv[]) {
         }
         cout << endl;
 
-        int* checked_quality_sys = check_quality_system(raw_fq[0]);
-        int read_len = checked_quality_sys[3];
-        cout << log_title() << "INFO -- After checking " << ((checked_quality_sys[3] < 4000000) ? checked_quality_sys[3] : 4000000) << " reads, min quality code is \'" 
-            << (char)checked_quality_sys[0] 
+        int* read_info = get_read_info(raw_fq[0]);
+        int read_len = read_info[3];
+        cout << log_title() << "INFO -- After checking " << ((read_info[3] < 4000000) ? read_info[3] : 4000000) << " reads, min quality code is \'" 
+            << (char)read_info[0] 
             << "\' and max quality code is \'" 
-            << (char)checked_quality_sys[1] 
+            << (char)read_info[1] 
             << "\', the quality system is probably " 
-            << quality_sys[checked_quality_sys[2]] 
+            << quality_sys[read_info[2]] 
             << ". " 
             << "The maximum length of scanned reads is " 
-            << checked_quality_sys[4] 
+            << read_info[4] 
             << "." << endl;
         if (prefer_specified_raw_quality_sys) {
             cout << log_title() << "WARN -- User prefered specified quality system "
@@ -299,7 +308,7 @@ int main(int argc, char* argv[]) {
                 << ". The program will treat quality codes correspondingly." << endl;
         }
         else {
-            raw_quality_sys = checked_quality_sys[2];
+            raw_quality_sys = read_info[2];
             cout << log_title() << "INFO -- The program will treat quality codes in accordance to "
                 << quality_sys[raw_quality_sys] << "." << endl;
         }
@@ -313,8 +322,8 @@ int main(int argc, char* argv[]) {
                 << quality_sys[clean_quality_sys] << "." << endl;
         }
 
-        if (checked_quality_sys[4] > max_read_len) {
-            max_read_len = checked_quality_sys[4];
+        if (read_info[4] > max_read_len) {
+            max_read_len = read_info[4];
             cout << log_title() << "WARN -- The maximum read length exceeds the given maximum read length (100), change it to " << max_read_len << "." << endl;
         }
 
@@ -323,58 +332,17 @@ int main(int argc, char* argv[]) {
             n_thread = 8;
         }
 
-        if (checked_quality_sys[3] < THREAD_BLOCK_SIZE * n_thread) {
+        if (read_info[3] < THREAD_BLOCK_SIZE * n_thread) {
             cout << log_title() << "WARN -- " << n_thread << " threads are redundant for filtering the given fastq(s), it is automatically adjusted to ";
-            n_thread = (checked_quality_sys[3] / THREAD_BLOCK_SIZE == 0) ? checked_quality_sys[3] / THREAD_BLOCK_SIZE + 1 : checked_quality_sys[3] / THREAD_BLOCK_SIZE;
+            n_thread = (read_info[3] / THREAD_BLOCK_SIZE == 0) ? read_info[3] / THREAD_BLOCK_SIZE + 1 : read_info[3] / THREAD_BLOCK_SIZE;
             cout << n_thread << " threads in accordance with the given fastq(s)." << endl;
         }
-        delete checked_quality_sys;
+        delete read_info;
 
         cout << log_title() << "INFO -- Start filtering..." << endl;
 #ifdef TESTING
         return 0;
 #endif
-        // if (verbose) {
-        //     cout << log_title() << "INFO " 
-        //         << setw(12) << "Processed" << " | "
-        //         << setw(12) << "Filtered" << " | "
-        //         << setw(12) << "Ratio(%)" << " | "
-        //         << setw(12) << "High" << " | "
-        //         //     << setw(12) << "Ratio(%)" << " | "
-        //         //     << setw(12) << "Ratio(%)" << " | "
-        //         << setw(12) << "Low average" << " | "
-        //         //     << setw(12) << "Ratio(%)" << " | "
-        //         //     << setw(12) << "Ratio(%)" << " | "
-        //         << setw(12) << "High low-" << " | "
-        //         //     << setw(12) << "Ratio(%)" << " | "
-        //         //     << setw(12) << "Ratio(%)" << " | " 
-        //         << setw(12) << "With" << " | " 
-        //         //     << setw(12) << "Ratio(%)" << " | "
-        //         //     << setw(12) << "Ratio(%)" << " | " 
-        //         << endl;
-        //     cout << log_title() << "INFO "
-        //         << setw(12) << "reads" << " | "
-        //         << setw(12) << "reads" << " | "
-        //         << setw(12) << "filtered" << " | "
-        //         << setw(12) << "N-rate" << " | "
-        //         //     << setw(12) << "in processed" << " | "
-        //         //     << setw(12) << "in filtered" << " | "
-        //         << setw(12) << "quality" << " | "
-        //         //     << setw(12) << "in processed" << " | "
-        //         //     << setw(12) << "in filtered" << " | "
-        //         << setw(12) << "quality-rate" << " | "
-        //         //     << setw(12) << "in processed" << " | "
-        //         //     << setw(12) << "in filtered" << " | "
-        //         << setw(12) << "adapter" << " | "
-        //         //     << setw(12) << "in processed" << " | "
-        //         //     << setw(12) << "in filtered" << " | "
-        //         << endl;
-        //     cout << log_title() << "INFO ";
-        //     for (int i = 0; i < 15 * 7; i++) {
-        //         cout << "-";
-        //     }
-        //     cout << endl;
-        // }
 
         statistic counter(raw_fq.size(), max_read_len);
         int param_int[4] = {min_base_quality, raw_quality_sys, clean_quality_sys, max_read_len};
@@ -407,79 +375,7 @@ int main(int argc, char* argv[]) {
         for (int i = 0; i < n_thread; i++)
             t[i].join();
 
-#ifdef TESTING
-        cout << "n_filtered: " << counter.n_filtered << endl;
-        cout << "n_total: " << counter.n_total << endl;
-        for (int i = 0; i < counter.read_len_info.size(); i++) {
-            cout << "Read len - " << i << endl;
-            for (int j = 0; j < counter.read_len_info[i].size(); j++) {
-                cout << counter.read_len_info[i][j] << " ";
-            }
-            cout << endl;
-            
-            cout << "Filtered info - " << i << endl;
-            for (int j = 0; j < counter.filtered_read_info[i].size(); j++) {
-                cout << counter.filtered_read_info[i][j] << " ";
-            }
-            cout << endl;
-            
-            cout << "Base info - " << i << endl;
-            int sum_base[10] = {0};
-            for (int j = 0; j < counter.base_info[i].size(); j++) {
-                for (int k = 0; k < counter.base_info[i][j].size(); k++) {
-                    sum_base[k] += counter.base_info[i][j][k]; 
-                    cout << counter.base_info[i][j][k] << " ";
-                }
-                cout << endl;
-            }
-            for (int j = 0; j < 10; j++) {
-                cout << sum_base[j] << " ";
-            }
-            cout << endl;
-
-            int sum_q[42] = {0};
-            cout << "Base quality info - " << 2 * i << endl;
-            for (int j = 0; j < counter.base_quality_info[2 * i].size(); j++) {
-                for (int k = 0; k < counter.base_quality_info[2 * i][j].size(); k++) {
-                    sum_q[k] += counter.base_quality_info[2 * i][j][k];
-                    cout << counter.base_quality_info[2 * i][j][k] << " ";
-                }
-                cout << endl;
-            }
-            for (int j = 0; j < 42; j++) {
-                cout << sum_q[j] << " ";
-            }
-            cout << endl;
-            cout << "Base quality info - " << 2 * i + 1 << endl;
-            for (int j = 0; j < counter.base_quality_info[2 * i + 1].size(); j++) {
-                for (int k = 0; k < counter.base_quality_info[2 * i + 1][j].size(); k++) {
-                    cout << counter.base_quality_info[2 * i + 1][j][k] << " ";
-                }
-                cout << endl;
-            }
-        }
-
-#endif
         write_statistic(counter, out_dir);
-
-        // if (verbose) {
-        //     cout << log_title() << "INFO ";
-        //     for (int i = 0; i < 15 * 7; i++) {
-        //         cout << "-";
-        //     }
-
-        //     cout << endl;
-        //     cout << log_title() << "INFO " 
-        //         << fixed
-        //         << setw(12) << setprecision(6) << counter[0] << " | "
-        //         << setw(12) << setprecision(6) << counter[1] << " | "
-        //         << setw(12) << setprecision(6) << counter[1] * 100.0 / counter[0] << " | "
-        //         << setw(12) << setprecision(6) << counter[2] << " | "
-        //         << setw(12) << setprecision(6) << counter[3] << " | "
-        //         << setw(12) << setprecision(6) << counter[4] << " | "
-        //         << setw(12) << setprecision(6) << counter[5] << " | "
-        //         << endl;
-        // }
 
         cout << log_title() << "INFO -- Merging tmp files..." << endl;
         merge(clean_fq, dropped_fq, tmp_dir, n_thread);
