@@ -34,7 +34,7 @@ Please read [CONTRIBUTING.md](https://gist.github.com/PurpleBooth/b24679402957c6
 
 ## Current versioning
 
-v1.1.1
+v1.2.0
 
 We use [SemVer](http://semver.org/) for versioning. For the versions available, see the [tags on this repository](https://github.com/bowentan/filterfq/releases). 
 
