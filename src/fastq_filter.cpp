@@ -182,6 +182,16 @@ namespace fastq_filter {
         return adapter_read_id_list;
     }
 
+    void trim_read(std::string& seq, int left_trim, int right_trim, int min_len) {
+        if (seq.size() - left_trim - right_trim < min_len) {
+            return;
+        }
+        else {
+            seq.erase(0, left_trim);
+            seq.erase(seq.size() - right_trim, right_trim);
+        }
+    }
+
     void processor(std::vector<boost::filesystem::path>& infiles,
             std::vector<boost::filesystem::path>& clean_outfiles,
             std::vector<boost::filesystem::path>& dropped_outfiles,
@@ -199,6 +209,11 @@ namespace fastq_filter {
         int raw_quality_sys = param_int[1];
         int clean_quality_sys = param_int[2];
         int max_read_len = param_int[3];
+        int min_read_len = param_int[4];
+        int * trim_crit = new int[infiles.size() * 2];
+        for (int i = 0; i < infiles.size() * 2; i++) {
+            trim_crit[i] = param_int[5 + i];
+        }
 
         float max_base_N_rate = param_float[0];
         float min_ave_quality = param_float[1];
@@ -225,6 +240,7 @@ namespace fastq_filter {
             unsigned int step_counter = 0;
             int* base_info;
             int* base_quality_info;
+            int* clean_base_info;
             int* clean_base_quality_info;
             std::string read_id_line, read_line, plus_line, quality_line;
             bool is_filtered;
@@ -307,19 +323,23 @@ namespace fastq_filter {
 
                 if (!is_filtered) {
                     local_counter.n_clean++;
-                    local_counter.read_len_info[1][base_info[0] - 1]++;
+                    trim_read(read_line, trim_crit[0], trim_crit[1], min_read_len);
+                    trim_read(quality_line, trim_crit[0], trim_crit[1], min_read_len);
+                    clean_base_info = get_base_info(read_line);
+                    local_counter.read_len_info[1][clean_base_info[0] - 1]++;
                     if (raw_quality_sys != clean_quality_sys) {
                         quality_system::quality_system_convert(quality_line, raw_quality_sys, clean_quality_sys);
                     }
                     clean_base_quality_info = get_base_quality_info(quality_line, clean_quality_sys);
                     for (int i = 1; i < clean_base_quality_info[0] + 1; i++) {
-                        local_counter.base_info[0][i - 1][base_info[i] + 5]++;
+                        local_counter.base_info[0][i - 1][clean_base_info[i] + 5]++;
                         local_counter.base_quality_info[1][i - 1][clean_base_quality_info[i]]++;
                     }
                     clean_outfq_compressor << read_id_line << std::endl
                         << read_line << std::endl
                         << plus_line << std::endl
                         << quality_line << std::endl;
+                    delete [] clean_base_info;
                     delete [] clean_base_quality_info;
                 }
                 else {
@@ -405,6 +425,8 @@ namespace fastq_filter {
             int* base_info2;
             int* base_quality_info1;
             int* base_quality_info2;
+            int* clean_base_info1;
+            int* clean_base_info2;
             int* clean_base_quality_info1;
             int* clean_base_quality_info2;
             std::string read_id_line1, read_line1, plus_line1, quality_line1;
@@ -563,8 +585,14 @@ namespace fastq_filter {
 
                 if (!is_pair_filtered) {
                     local_counter.n_clean++;
-                    local_counter.read_len_info[1][base_info1[0] - 1]++;
-                    local_counter.read_len_info[3][base_info2[0] - 1]++;
+                    trim_read(read_line1, trim_crit[0], trim_crit[1], min_read_len);
+                    trim_read(read_line2, trim_crit[2], trim_crit[3], min_read_len);
+                    trim_read(quality_line1, trim_crit[0], trim_crit[1], min_read_len);
+                    trim_read(quality_line2, trim_crit[2], trim_crit[3], min_read_len);
+                    clean_base_info1 = get_base_info(read_line1);
+                    clean_base_info2 = get_base_info(read_line2);
+                    local_counter.read_len_info[1][clean_base_info1[0] - 1]++;
+                    local_counter.read_len_info[3][clean_base_info2[0] - 1]++;
                     if (raw_quality_sys != clean_quality_sys) {
                         quality_system::quality_system_convert(quality_line1, raw_quality_sys, clean_quality_sys);
                         quality_system::quality_system_convert(quality_line2, raw_quality_sys, clean_quality_sys);
@@ -572,11 +600,11 @@ namespace fastq_filter {
                     clean_base_quality_info1 = get_base_quality_info(quality_line1, clean_quality_sys);
                     clean_base_quality_info2 = get_base_quality_info(quality_line2, clean_quality_sys);
                     for (int i = 1; i < clean_base_quality_info1[0] + 1; i++) {
-                        local_counter.base_info[0][i - 1][base_info1[i] + 5]++;
+                        local_counter.base_info[0][i - 1][clean_base_info1[i] + 5]++;
                         local_counter.base_quality_info[1][i - 1][clean_base_quality_info1[i]]++;
                     }
                     for (int i = 1; i < clean_base_quality_info2[0] + 1; i++) {
-                        local_counter.base_info[1][i - 1][base_info2[i] + 5]++;
+                        local_counter.base_info[1][i - 1][clean_base_info2[i] + 5]++;
                         local_counter.base_quality_info[3][i - 1][clean_base_quality_info2[i]]++;
                     }
                     clean_outfq1_compressor << read_id_line1 << std::endl
@@ -587,6 +615,8 @@ namespace fastq_filter {
                         << read_line2 << std::endl
                         << plus_line2 << std::endl
                         << quality_line2 << std::endl;
+                    delete [] clean_base_info1;
+                    delete [] clean_base_info2;
                     delete [] clean_base_quality_info1;
                     delete [] clean_base_quality_info2;
                 }
@@ -630,7 +660,6 @@ namespace fastq_filter {
             (*stat).n_filtered += local_counter.n_filtered;
             (*stat).n_total += local_counter.n_total;
             (*stat).n_clean += local_counter.n_clean;
-            std::cout << infiles.size() << std::endl;
             for (int i = 0; i < infiles.size(); i++) {
                 for (int j = 0; j < (*stat).read_len_info[i].size(); j++) {
                     (*stat).read_len_info[2 * i][j] += local_counter.read_len_info[2 * i][j];

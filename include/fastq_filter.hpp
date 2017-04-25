@@ -15,13 +15,14 @@ namespace fastq_filter {
     };
 
     std::string log_title();
-    int* check_quality_system(const boost::filesystem::path&);
+    int* get_read_info(const boost::filesystem::path&);
     float get_base_N_rate(const std::string&);
     float get_average_quality(const std::string&, const int);
     float get_low_quality_rate(const std::string&, const int, const int);
     int* get_base_info(const std::string&);  // 1 x (read lenth + 1)
     int* get_base_quality_info(const std::string&, const int);
     std::unordered_set<std::string> load_adapter(boost::filesystem::path&);
+    void trim_read(std::string&, int, int);
     void processor(std::vector<boost::filesystem::path>&,
             std::vector<boost::filesystem::path>&,
             std::vector<boost::filesystem::path>&,

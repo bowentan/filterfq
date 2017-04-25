@@ -907,7 +907,9 @@ command_options.o: command_options.cpp \
  /usr/local/include/boost/program_options/detail/convert.hpp \
  /usr/local/include/boost/program_options/variables_map.hpp \
  /usr/local/include/boost/program_options/version.hpp \
- /usr/local/include/c++/6.2.0/cstdarg
+ /usr/local/include/c++/6.2.0/cstdarg \
+ /usr/local/include/c++/6.2.0/iostream \
+ /usr/local/include/c++/6.2.0/iomanip ../include/version.hpp
 
 /usr/local/include/boost/program_options.hpp:
 
@@ -2826,3 +2828,9 @@ command_options.o: command_options.cpp \
 /usr/local/include/boost/program_options/version.hpp:
 
 /usr/local/include/c++/6.2.0/cstdarg:
+
+/usr/local/include/c++/6.2.0/iostream:
+
+/usr/local/include/c++/6.2.0/iomanip:
+
+../include/version.hpp:
